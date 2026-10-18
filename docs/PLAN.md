@@ -40,8 +40,10 @@
 | H3 | representation shift under cheap perturbations predicts spuriousness | `internal:shift` head | keep if mixed-holdout ≥ prior+2 & CV ↑ | needs GPU cache |
 | H4 | memorisation ⇒ spurious: low problem NLL (Min-K%) and large NLL increase under rename/typos | `internal:nll(+shift)` heads | same | needs GPU cache |
 | H5 | batch-rank labelling beats a fixed threshold when the test is balanced per model | simulate on holdout | keep if ≥ +2 pts on balanced resamples | EXP-003 |
-| H6 | behavioural signal (own base accuracy / answer agreement from a few samples) ranks models within a problem | byeolki samples, split-sample | report; decides test-time sampling | EXP-002 |
-| H7 | text-only heads add nothing under balance | EXP-001 | drop if ≤ prior | EXP-001 |
+| H6 | behavioural signal (own base accuracy / answer agreement from a few samples) ranks models within a problem | byeolki samples, split-sample | report; decides test-time sampling | **supported EXP-002** (AUC .74–.76, mixed pairwise .91, n small) |
+| H7 | text-only heads add nothing under balance | EXP-001 | drop if ≤ prior | **confirmed EXP-001** (shared gain = source confound) |
+| H8 | white-box solve-rate probe: ridge on own hidden states → predicted base accuracy p̂ (trained on ALL pool problems × model, solved or not); robust ⇔ high p̂ (batch rank) | self labels + caches | keep if mixed-holdout and holdout ≥ prior+2 | needs GPU |
+| H9 | test-time self-consistency: greedy answers on the original + 3 shipped perturbations (deterministic), score = agreement, tie-break shorter reasoning | bundle `behav` route, timing from diag-v1 | keep if mixed-holdout ≥ prior+2 within budget | implementing |
 
 ## NEEDS HUMAN (commands, expected time/cost, what to send back)
 

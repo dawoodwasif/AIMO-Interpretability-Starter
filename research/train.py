@@ -1,19 +1,22 @@
-"""Train per-model heads with problem-grouped CV and export bundle artifacts.
+"""Train per-model heads with problem-grouped CV, score once on a holdout, export.
 
-For each target model (plus '*' = shared fallback over all rows):
-  * candidate feature sets: meta, text, and every internal:* set cached in
-    data/cache/features/<model_slug>.npz (optionally PCA-reduced)
-  * candidates are scored by GroupKFold CV (groups = problem_id) on a
-    SELECTION split; the winner is then scored once on a held-out split of
-    problems it never saw (honest estimate; selection over many layers
-    inflates CV accuracy)
-  * a head is exported only if it beats the prior baseline on selection CV
-    by --min-gain; otherwise the model falls back to priors
+Rows = one per eval case (model_id, problem, reasoning_effort), from data/labeled/.
+For each target (model[@effort]) and '*' (shared fallback over all rows):
+  * candidate feature sets: meta, text (problem-only), and every internal:* set in
+    data/cache/features/<model_slug>.npz (+ "internal:nll+internal:shift")
+  * selection by GroupKFold CV (groups = problem_id) on the SELECTION split;
+    the winner is scored ONCE on held-out problems
+  * metrics next to: majority (per target, from the selection split), and on
+    MIXED problems (problems with both labels across models; mimics the balanced
+    test), plus a balanced-batch simulation (threshold vs batch-rank labelling)
+  * solve-rate confound: AUC of base_accuracy alone, corr(head score, base_accuracy)
+  * export rule (CLAUDE.md §5): holdout acc >= majority holdout + --min-gain AND
+    CV acc > majority CV. Otherwise the target ships its prior only.
 Writes solution/artifacts/{manifest.json, *.npz} and results/<exp>.json.
 
 Usage:
-    python research/train.py --exp EXP-001 --sources official self
-    python research/train.py --exp EXP-002 --models deepseek-ai/DeepSeek-R1-0528-Qwen3-8B --pca 32
+    python research/train.py --exp EXP-001 --dry-run
+    python research/train.py --exp EXP-004 --sources self byeolki official_math --pca 16
 """
 from __future__ import annotations
 
@@ -26,6 +29,7 @@ from collections import Counter, defaultdict
 import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GroupKFold
 
 from common import ARTIFACTS, CACHE, RESULTS, load_labeled, slug, text_hash
@@ -34,7 +38,30 @@ from aimo_core.linear import LinearHead
 from aimo_core.text_features import FEATURE_FUNCS
 
 warnings.filterwarnings("ignore")
-CS = [0.01, 0.1, 1.0]
+CS = [0.003, 0.03, 0.3]
+SOURCE_RANK = {"self": 0, "official": 1, "official_math": 2, "byeolki": 3}
+
+
+def target_of(r) -> str:
+    e = r.get("reasoning_effort") or "default"
+    return r["model_id"] if e == "default" else f"{r['model_id']}@{e}"
+
+
+def dedupe(rows):
+    """One row per (target, problem); prefer self > official > official_math > byeolki."""
+    best = {}
+    for r in rows:
+        k = (target_of(r), r["problem_id"])
+        if k not in best or SOURCE_RANK.get(r["source"], 9) < SOURCE_RANK.get(best[k]["source"], 9):
+            best[k] = r
+    return list(best.values())
+
+
+def mixed_problems(rows) -> set:
+    labs = defaultdict(set)
+    for r in rows:
+        labs[r["problem_id"]].add(bool(r["label"]))
+    return {p for p, s in labs.items() if len(s) == 2}
 
 
 def _fit(X, y, C, pca_k):
@@ -50,76 +77,93 @@ def _fit(X, y, C, pca_k):
     if len(set(y)) < 2:
         coef, b = np.zeros(Z.shape[1]), float(np.log((y.mean() + 1e-3) / (1 - y.mean() + 1e-3)))
     else:
-        clf = LogisticRegression(C=C, max_iter=2000, class_weight="balanced").fit(Z, y)
+        clf = LogisticRegression(C=C, max_iter=5000, class_weight="balanced").fit(Z, y)
         coef, b = clf.coef_[0], float(clf.intercept_[0])
     return mean, scale, proj, coef, b
 
 
-def _head(name, fs, X, y, C, pca_k) -> LinearHead:
+def head(name, fs, X, y, C, pca_k) -> LinearHead:
     mean, scale, proj, coef, b = _fit(X, y, C, pca_k)
     return LinearHead(name=name, feature_set=fs, mean=mean, scale=scale, coef=coef, intercept=b, proj=proj,
                       meta={"C": C, "pca": pca_k, "n": int(len(y))})
 
 
-def _metrics(y, pred):
+def metrics(y, pred, groups=None, mixed=None):
     y, pred = np.asarray(y, bool), np.asarray(pred, bool)
-    acc = float((y == pred).mean())
+    out = {"acc": round(float((y == pred).mean()), 4) if len(y) else None, "n": int(len(y))}
     tpr = float(pred[y].mean()) if y.any() else 0.0
     tnr = float((~pred[~y]).mean()) if (~y).any() else 0.0
-    return {"acc": round(acc, 4), "bal_acc": round((tpr + tnr) / 2, 4), "n": int(len(y))}
+    out["bal_acc"] = round((tpr + tnr) / 2, 4)
+    if groups is not None and mixed:
+        m = np.array([g in mixed for g in groups])
+        out["mixed_acc"] = round(float((y[m] == pred[m]).mean()), 4) if m.any() else None
+        out["mixed_n"] = int(m.sum())
+    return out
+
+
+def balanced_batches(y, score, thr=0.5, size=8, reps=400, seed=0):
+    """Simulate per-model-balanced test batches: threshold vs batch-rank accuracy."""
+    y = np.asarray(y, bool)
+    pos, neg = np.where(y)[0], np.where(~y)[0]
+    if len(pos) < 2 or len(neg) < 2:
+        return None
+    rng = np.random.RandomState(seed)
+    h = size // 2
+    acc_t, acc_r = [], []
+    for _ in range(reps):
+        idx = np.concatenate([rng.choice(pos, min(h, len(pos)), replace=len(pos) < h),
+                              rng.choice(neg, min(h, len(neg)), replace=len(neg) < h)])
+        s, yy = np.asarray(score)[idx], y[idx]
+        acc_t.append(float(((s >= thr) == yy).mean()))
+        order = np.argsort(-s, kind="stable")
+        pr = np.zeros(len(idx), bool)
+        pr[order[: len(idx) // 2]] = True
+        acc_r.append(float((pr == yy).mean()))
+    return {"threshold": round(float(np.mean(acc_t)), 4), "rank": round(float(np.mean(acc_r)), 4)}
 
 
 def cv(X, y, groups, C, pca_k, folds):
     k = min(folds, len(set(groups)))
     if k < 2:
-        return None
-    pred = np.zeros(len(y), bool)
+        return None, None
+    score = np.zeros(len(y))
     for tr, te in GroupKFold(n_splits=k).split(X, y, groups):
-        h = _head("cv", "x", X[tr], y[tr], C, pca_k)
-        pred[te] = h.proba(X[te]) >= 0.5
-    return _metrics(y, pred)
+        score[te] = head("cv", "x", X[tr], y[tr], C, pca_k).proba(X[te])
+    return metrics(y, score >= 0.5), score
+
+
+def load_cache(target):
+    mid, _, eff = target.partition("@")
+    for name in ([f"{slug(mid)}_{eff}"] if eff else []) + [slug(mid)]:
+        p = CACHE / "features" / f"{name}.npz"
+        if p.exists():
+            z = np.load(p)
+            feats = {k: z[k].astype(np.float64) for k in z.files if k.startswith("internal:")}
+            if "internal:nll" in feats and "internal:shift" in feats:
+                feats["internal:nll+internal:shift"] = np.concatenate([feats["internal:nll"], feats["internal:shift"]], 1)
+            return {str(k): i for i, k in enumerate(z["keys"])}, feats
+    return None
 
 
 def build_X(fs, rows, cache):
     if fs in FEATURE_FUNCS:
-        return np.stack([FEATURE_FUNCS[fs](r["original_problem"], r["permutation_type"]) for r in rows]).astype(np.float64)
-    keys, arr = cache
-    idx = {k: i for i, k in enumerate(keys)}
-    ii = [idx.get(text_hash(r["original_problem"])) for r in rows]
+        return np.stack([FEATURE_FUNCS[fs](r["original_problem"]) for r in rows]).astype(np.float64)
+    if cache is None or fs not in cache[1]:
+        return None
+    ii = [cache[0].get(text_hash(r["original_problem"])) for r in rows]
     if any(i is None for i in ii):
         return None
-    return arr[fs][ii].astype(np.float64)
+    return cache[1][fs][ii]
 
 
-def load_cache(model_id):
-    p = CACHE / "features" / f"{slug(model_id)}.npz"
-    if not p.exists():
+def auc(y, s):
+    y = np.asarray(y, bool)
+    if y.all() or (~y).all():
         return None
-    z = np.load(p)
-    return [str(k) for k in z["keys"]], {k: z[k] for k in z.files if k.startswith("internal:")}
+    return round(float(roc_auc_score(y, s)), 4)
 
 
-def priors(rows):
-    y = np.array([r["label"] for r in rows], float)
-    prior = float((y.sum() + 1) / (len(y) + 2)) if len(y) else 0.5
-    by = defaultdict(list)
-    for r in rows:
-        key = r["permutation_type"][0] if len(r["permutation_type"]) == 1 else "__all__"
-        by[key].append(r["label"])
-    pp = {k: round((sum(v) + prior * 2) / (len(v) + 2), 4) for k, v in by.items()}
-    return round(prior, 4), pp
-
-
-def prior_pred(rows, prior, pp):
-    out = []
-    for r in rows:
-        t = r["permutation_type"]
-        p = pp.get(t[0], prior) if len(t) == 1 else pp.get("__all__", prior)
-        out.append(p >= 0.5)
-    return np.array(out)
-
-
-def train_target(target, rows, args, layer_stride):
+def train_target(target, rows, mixed, args):
     groups_all = np.array([r["problem_id"] for r in rows])
     uniq = sorted(set(groups_all))
     rng = np.random.RandomState(args.seed)
@@ -130,19 +174,29 @@ def train_target(target, rows, args, layer_stride):
     ho = [r for r in rows if r["problem_id"] in hold]
     y_sel = np.array([r["label"] for r in sel], bool)
     g_sel = np.array([r["problem_id"] for r in sel])
+    y_ho = np.array([r["label"] for r in ho], bool)
+    g_ho = [r["problem_id"] for r in ho]
 
-    prior, pp = priors(sel)
-    base = _metrics(y_sel, prior_pred(sel, prior, pp))
-    report = {"target": target, "n_rows": len(rows), "n_problems": len(set(groups_all)),
-              "label_balance": round(float(np.mean([r["label"] for r in rows])), 3),
-              "prior_baseline_sel": base, "candidates": []}
+    prior = float((y_sel.sum() + 1) / (len(y_sel) + 2)) if len(y_sel) else 0.5
+    maj = prior >= 0.5
+    rep = {"target": target, "n_rows": len(rows), "n_problems": len(uniq), "n_holdout_rows": len(ho),
+           "label_balance": round(float(np.mean([r["label"] for r in rows])), 3),
+           "mixed_rows": int(sum(r["problem_id"] in mixed for r in rows)),
+           "majority_cv": metrics(y_sel, np.full(len(y_sel), maj)),
+           "majority_holdout": metrics(y_ho, np.full(len(y_ho), maj), g_ho, mixed),
+           "candidates": []}
+    # per-model prior baseline (differs from majority only for the shared '*' target)
+    per = defaultdict(list)
+    for r in sel:
+        per[target_of(r)].append(r["label"])
+    pm = {k: (sum(v) + 1) / (len(v) + 2) >= 0.5 for k, v in per.items()}
+    rep["model_prior_holdout"] = metrics(y_ho, np.array([pm.get(target_of(r), maj) for r in ho], bool), g_ho, mixed)
+    base = [r.get("base_accuracy") for r in ho]
+    if ho and all(b is not None for b in base):
+        rep["base_acc_auc_holdout"] = auc(y_ho, base)  # oracle-ish: needs sampling
 
     cache = load_cache(target) if target != "*" else None
-    fsets = ["meta", "text"]
-    if cache:
-        names = sorted(cache[1], key=lambda s: (s.split(":")[1], int(s.rsplit("L", 1)[1]) if ":L" in s else -1))
-        fsets += [n for n in names if ":L" not in n or int(n.rsplit("L", 1)[1]) % layer_stride == 0]
-
+    fsets = ["meta", "text"] + (sorted(cache[1]) if cache else [])
     best = None
     for fs in fsets:
         X = build_X(fs, sel, cache)
@@ -150,54 +204,66 @@ def train_target(target, rows, args, layer_stride):
             continue
         for C in CS:
             for pk in ([0] if X.shape[1] <= 64 else [args.pca]):
-                m = cv(X, y_sel, g_sel, C, pk, args.folds)
+                m, _ = cv(X, y_sel, g_sel, C, pk, args.folds)
                 if m is None:
                     continue
                 cand = {"feature_set": fs, "C": C, "pca": pk, **m}
-                report["candidates"].append(cand)
-                if best is None or (m["acc"], m["bal_acc"]) > (best["acc"], best["bal_acc"]):
+                rep["candidates"].append(cand)
+                if best is None or (m["bal_acc"], m["acc"]) > (best["bal_acc"], best["acc"]):
                     best = cand
-
-    report["best"] = best
-    entry = {"prior": prior, "perm_prior": pp, "heads": []}
-    if best and best["acc"] >= base["acc"] + args.min_gain:
+    rep["best"] = best
+    entry = {"prior": round(prior, 4), "heads": []}
+    if best and ho:
         Xs = build_X(best["feature_set"], sel, cache)
-        h_sel = _head("sel", best["feature_set"], Xs, y_sel, best["C"], best["pca"])
-        if ho:
-            y_ho = np.array([r["label"] for r in ho], bool)
-            Xh = build_X(best["feature_set"], ho, cache)
-            report["holdout"] = {"head": _metrics(y_ho, h_sel.proba(Xh) >= 0.5),
-                                 "prior": _metrics(y_ho, prior_pred(ho, prior, pp))}
-        # refit on ALL rows for export
-        Xa = build_X(best["feature_set"], rows, cache)
-        ya = np.array([r["label"] for r in rows], bool)
-        fname = f"{slug(target) if target != '*' else 'shared'}__{best['feature_set'].replace(':', '_')}.npz"
-        if not args.dry_run:
-            _head(f"{target}:{best['feature_set']}", best["feature_set"], Xa, ya, best["C"], best["pca"]).save(
-                str(ARTIFACTS / fname))
-        entry["heads"].append({"file": fname, "weight": 1.0})
-    entry["prior"], entry["perm_prior"] = priors(rows)  # export priors from all rows
-    return entry, report
+        h = head("sel", best["feature_set"], Xs, y_sel, best["C"], best["pca"])
+        s_ho = h.proba(build_X(best["feature_set"], ho, cache))
+        rep["holdout"] = metrics(y_ho, s_ho >= 0.5, g_ho, mixed)
+        rep["holdout_auc"] = auc(y_ho, s_ho)
+        rep["balanced_batches"] = balanced_batches(y_ho, s_ho)
+        if all(b is not None for b in base) and len(set(base)) > 1:
+            rep["corr_score_base_acc"] = round(float(np.corrcoef(s_ho, base)[0, 1]), 4)
+        ref = max(rep["majority_holdout"]["acc"], rep["model_prior_holdout"]["acc"])
+        keep = (rep["holdout"]["acc"] >= ref + args.min_gain
+                and best["acc"] > rep["majority_cv"]["acc"])
+        rep["export"] = bool(keep)
+        if keep:
+            Xa = build_X(best["feature_set"], rows, cache)
+            ya = np.array([r["label"] for r in rows], bool)
+            fname = f"{slug(target) if target != '*' else 'shared'}__{best['feature_set'].replace(':', '_').replace('+', '-')}.npz"
+            if not args.dry_run:
+                head(f"{target}:{best['feature_set']}", best["feature_set"], Xa, ya, best["C"], best["pca"]).save(
+                    str(ARTIFACTS / fname))
+            entry["heads"].append({"file": fname, "weight": 1.0})
+            if args.batch_rank:
+                entry["batch_rank"] = True
+    entry["prior"] = round(float((sum(r["label"] for r in rows) + 1) / (len(rows) + 2)), 4)
+    return entry, rep
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--exp", required=True, help="experiment id, e.g. EXP-003")
-    ap.add_argument("--sources", nargs="*", default=None, help="official / self (default: all)")
-    ap.add_argument("--models", nargs="*", default=KNOWN_MODELS)
+    ap.add_argument("--sources", nargs="*", default=None, help="self official official_math byeolki (default all)")
+    ap.add_argument("--models", nargs="*", default=None, help="targets (model or model@effort); default all known")
+    ap.add_argument("--allow-leak", action="store_true", help="keep rows flagged by the organizers' leakage advice")
     ap.add_argument("--folds", type=int, default=5)
-    ap.add_argument("--holdout", type=float, default=0.25)
-    ap.add_argument("--pca", type=int, default=32)
-    ap.add_argument("--layer-stride", type=int, default=2)
+    ap.add_argument("--holdout", type=float, default=0.3)
+    ap.add_argument("--pca", type=int, default=16)
     ap.add_argument("--min-gain", type=float, default=0.02)
+    ap.add_argument("--batch-rank", action="store_true", help="exported heads label by batch rank (H5)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--dry-run", action="store_true", help="report only; do not touch artifacts")
     args = ap.parse_args()
 
     rows = load_labeled(sources=args.sources)
+    if not args.allow_leak:
+        rows = [r for r in rows if not r.get("leak")]
+    rows = dedupe(rows)
     if not rows:
-        raise SystemExit("no labeled rows in data/labeled/ - run research/fetch_data.py or gen_labels.py")
-    print(f"{len(rows)} labeled rows; by model: {Counter(r['model_id'] for r in rows).most_common()}")
+        raise SystemExit("no labeled rows in data/labeled/")
+    mixed = mixed_problems(rows)
+    print(f"{len(rows)} rows, {len({r['problem_id'] for r in rows})} problems, {len(mixed)} mixed; "
+          f"by target {Counter(target_of(r) for r in rows).most_common()}")
 
     if not args.dry_run:
         for f in ARTIFACTS.glob("*.npz"):
@@ -205,21 +271,24 @@ def main() -> None:
     manifest = {"version": 1, "exp": args.exp, "created": time.strftime("%Y-%m-%d %H:%M"),
                 "default_prior": 0.5, "threshold": 0.5, "models": {}}
     reports = []
-    targets = [m for m in args.models if any(r["model_id"] == m for r in rows)] + ["*"]
-    for t in targets:
-        trows = rows if t == "*" else [r for r in rows if r["model_id"] == t]
-        entry, rep = train_target(t, trows, args, args.layer_stride)
+    known = args.models or sorted({target_of(r) for r in rows if r["model_id"] in KNOWN_MODELS})
+    for t in known + ["*"]:
+        trows = rows if t == "*" else [r for r in rows if target_of(r) == t]
+        if not trows:
+            continue
+        entry, rep = train_target(t, trows, mixed, args)
         manifest["models"][t] = entry
         reports.append(rep)
         b = rep.get("best") or {}
-        print(f"[{t}] rows={rep['n_rows']} problems={rep['n_problems']} balance={rep['label_balance']} "
-              f"prior={rep['prior_baseline_sel']['acc']} best={b.get('feature_set')} cv={b.get('acc')} "
-              f"holdout={rep.get('holdout')} exported={bool(entry['heads'])}")
+        print(f"[{t}] rows={rep['n_rows']} mixed_rows={rep['mixed_rows']} bal={rep['label_balance']} "
+              f"maj_cv={rep['majority_cv']['acc']} best={b.get('feature_set')}(C={b.get('C')}) cv={b.get('acc')}/{b.get('bal_acc')} "
+              f"| holdout {rep.get('holdout')} vs maj {rep['majority_holdout']['acc']} model-prior {rep['model_prior_holdout']['acc']} auc={rep.get('holdout_auc')} "
+              f"base_auc={rep.get('base_acc_auc_holdout')} bb={rep.get('balanced_batches')} export={rep.get('export')}")
     manifest["default_prior"] = manifest["models"]["*"]["prior"]
-
     RESULTS.mkdir(exist_ok=True)
     out = RESULTS / f"{args.exp}.json"
-    out.write_text(json.dumps({"args": vars(args), "reports": reports}, indent=1, default=str))
+    out.write_text(json.dumps({"args": vars(args), "n_rows": len(rows), "n_mixed": len(mixed), "reports": reports},
+                              indent=1, default=str))
     if not args.dry_run:
         (ARTIFACTS / "manifest.json").write_text(json.dumps(manifest, indent=1))
         print(f"artifacts -> {ARTIFACTS}")
