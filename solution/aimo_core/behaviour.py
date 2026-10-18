@@ -95,10 +95,26 @@ def _generate(tok, model, prompts: list[str], max_new: int, chunk: int, deadline
     return outs
 
 
+def features_from_raw(raw: list[dict], kinds=None) -> np.ndarray:
+    """[agree, parsed, len, trunc] per problem from per-copy results; `kinds` selects
+    which perturbed copies to use (the original is always included)."""
+    out = []
+    for r in raw:
+        sel = [i for i, k in enumerate(r["kinds"]) if k == "original" or kinds is None or k in kinds]
+        ans = [r["answers"][i] for i in sel]
+        got = [a for a in ans if a is not None]
+        per = len(sel)
+        agree = Counter(got).most_common(1)[0][1] / per if got else 0.0
+        out.append([agree, len(got) / per, float(np.mean([r["lens"][i] for i in sel])) / r["max_new"],
+                    float(np.mean([r["trunc"][i] for i in sel]))])
+    return np.asarray(out, dtype=np.float64)
+
+
 def run(tok, model, problems: list[str], deadline: float, kinds=("rename", "typos", "distract"),
         min_tokens: int = 512, max_tokens: int = 16384, model_id: str = "",
-        effort: str | None = None) -> np.ndarray | None:
-    """Return features [n, 4] or None if there is not enough time for min_tokens."""
+        effort: str | None = None, return_raw: bool = False):
+    """Return features [n, 4] (or per-copy raw dicts if return_raw) or None if there is
+    not enough time for min_tokens."""
     import torch
 
     texts = [p for prob in problems for p in [prob] + [v for _, v in perturb.variants(prob, kinds, k=1)]]
@@ -127,15 +143,13 @@ def run(tok, model, problems: list[str], deadline: float, kinds=("rename", "typo
             gens[i] = (gens[i][0] + "\\boxed{" + f[0], gens[i][1], "")
     _log(f"behaviour: {len(prompts)} seqs, max_new={max_new}, chunk={chunk}, {time.monotonic() - t0:.0f}s, "
          f"trunc={np.mean(trunc):.2f}")
-    feats = []
+    raw = []
     for i in range(len(problems)):
         g = gens[i * per:(i + 1) * per]
-        tr = trunc[i * per:(i + 1) * per]
-        ans = [extract_answer(x[0]) for x in g]
-        got = [a for a in ans if a is not None]
-        agree = Counter(got).most_common(1)[0][1] / per if got else 0.0
-        feats.append([agree, len(got) / per, float(np.mean([x[1] for x in g])) / max_new, float(np.mean(tr))])
-    return np.asarray(feats, dtype=np.float64)
+        raw.append({"kinds": ["original"] + list(kinds), "answers": [extract_answer(x[0]) for x in g],
+                    "lens": [int(x[1]) for x in g], "trunc": [bool(t) for t in trunc[i * per:(i + 1) * per]],
+                    "max_new": int(max_new)})
+    return raw if return_raw else features_from_raw(raw)
 
 
 def score(feats: np.ndarray) -> np.ndarray:

@@ -10,6 +10,7 @@ Feature-set names produced here:
   internal:shift       how much the model's state moves when the problem is
                        perturbed by aimo_core.perturb (rename/typos/distract):
                        NLL deltas + cosine distances at fixed relative depths
+  internal:shift_frame same statistics for the domain-style "frame" copy (H10)
 
 The SAME functions run offline (research/extract_features.py) and inside the
 bundle, so trained heads see identical inputs. torch/transformers are imported
@@ -211,6 +212,19 @@ def extract(tok, model, problems: list[str], layers: list[int] | None = None,
             r += list(np.abs(lg).mean(0))
             rows.append(np.asarray(r, dtype=np.float32))
         feats["internal:shift"] = np.stack(rows)
+        # H10: domain-style frame copy (separate set so H10 can be ablated)
+        fr = [perturb.variants(p, ("frame",), k=1)[0][1] for p in problems]
+        ff = _forward(tok, model, fr, sl, batch_size, deadline, effort=effort)
+        rows = []
+        for i in range(len(problems)):
+            r = list(ff["internal:nll"][i, [0, 2, 8]] - feats["internal:nll"][i, [0, 2, 8]])
+            for li in sl:
+                for pool in ("last", "mean"):
+                    key = f"internal:{pool}:L{li}"
+                    r.append(float(_cos_dist(ff[key][i:i + 1], feats[key][i][None])[0]))
+            r += list(np.abs(ff["internal:logits"][i] - feats["internal:logits"][i]))
+            rows.append(np.asarray(r, dtype=np.float32))
+        feats["internal:shift_frame"] = np.stack(rows)
         if layers is not None:  # drop helper layers the caller did not ask for
             for li in sl:
                 if li not in layers:
@@ -231,7 +245,8 @@ def layers_needed(feature_sets: list[str]) -> list[int]:
 def features_for(feature_sets: list[str], tok, model, problems: list[str], deadline=None, effort=None) -> dict:
     """Compute exactly what a set of heads needs (used by the runtime)."""
     feats = extract(tok, model, problems, layers=layers_needed(feature_sets), deadline=deadline,
-                    shift=any("internal:shift" in fs.split("+") for fs in feature_sets), effort=effort)
+                    shift=any(p in ("internal:shift", "internal:shift_frame") for fs in feature_sets
+                              for p in fs.split("+")), effort=effort)
     # concatenated sets, e.g. "internal:nll+internal:shift"
     for fs in feature_sets:
         if "+" in fs:

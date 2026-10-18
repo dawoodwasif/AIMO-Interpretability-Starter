@@ -62,6 +62,7 @@ def test_extract_shapes_and_determinism(tiny_model_dir):
     assert f1["internal:nll"].shape == (3, len(internals.NLL_NAMES))
     assert f1["internal:logits"].shape == (3, 4)
     assert f1["internal:shift"].shape[0] == 3 and np.isfinite(f1["internal:shift"]).all()
+    assert f1["internal:shift_frame"].shape[0] == 3 and np.isfinite(f1["internal:shift_frame"]).all()
     # padding / batch size must not change features (left padding, masked mean)
     for k in ("internal:nll", "internal:last:L2", "internal:shift"):
         assert np.allclose(f1[k], f2[k], atol=1e-4), k
@@ -125,6 +126,11 @@ def test_behaviour_route(tiny_model_dir, tmp_path, monkeypatch):
     assert (f1[:, 3] >= 0).all() and ((0 <= behaviour.score(f1)) & (behaviour.score(f1) <= 1)).all()
     assert behaviour.run(tok, model, PROBLEMS, time.monotonic() + 0.001, min_tokens=512) is None  # no time
     assert behaviour.extract_answer("so \\boxed{1,024}.") == "1024"
+    raw = behaviour.run(tok, model, PROBLEMS, time.monotonic() + 60, kinds=("rename", "typos", "distract", "frame"),
+                        min_tokens=4, max_tokens=8, return_raw=True)
+    assert raw[0]["kinds"] == ["original", "rename", "typos", "distract", "frame"]
+    sub = behaviour.features_from_raw(raw, ("rename", "typos", "distract"))
+    assert np.allclose(sub, f1)  # subset of a 5-copy run == the 4-copy run (greedy, per-sequence)
 
     (tmp_path / "manifest.json").write_text(json.dumps(
         {"threshold": 0.5, "models": {"tiny": {"prior": 0.0, "batch_rank": True,
@@ -138,3 +144,13 @@ def test_behaviour_route(tiny_model_dir, tmp_path, monkeypatch):
         assert len(out) == 3 and all(type(x) is bool for x in out)
     finally:
         artifacts.manifest.cache_clear()
+
+
+def test_frame_keeps_problem_verbatim():
+    import random
+
+    from aimo_core import perturb
+
+    t = PROBLEMS[1]
+    v = perturb.frame(t, random.Random("x"))
+    assert t in v and len(v) > len(t)

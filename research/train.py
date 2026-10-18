@@ -185,16 +185,27 @@ def load_cache(target):
     """(key -> row index, {feature_set: matrix}) merging internals and behaviour caches."""
     mid, _, eff = target.partition("@")
     per_key = {}
-    for suffix, prefix in (("", "internal:"), ("_behav", "behav")):
-        for name in ([f"{slug(mid)}_{eff}{suffix}"] if eff else []) + [f"{slug(mid)}{suffix}"]:
-            p = CACHE / "features" / f"{name}.npz"
-            if p.exists():
-                for k, d in _npz(p, prefix).items():
-                    per_key.setdefault(k, {}).update(d)
-                break
+    names = ([f"{slug(mid)}_{eff}"] if eff else []) + [slug(mid)]
+    for name in names:
+        p = CACHE / "features" / f"{name}.npz"
+        if p.exists():
+            for k, d in _npz(p, "internal:").items():
+                per_key.setdefault(k, {}).update(d)
+            break
+    for name in names:
+        p = CACHE / "features" / f"{name}_behav.jsonl"
+        if p.exists():
+            from aimo_core.behaviour import features_from_raw
+
+            raw = [json.loads(l) for l in open(p)]
+            for sub, kinds in (("behav", ("rename", "typos", "distract")), ("behav_frame", None)):
+                for r, f in zip(raw, features_from_raw(raw, kinds)):
+                    per_key.setdefault(r["key"], {})[sub] = f
+            break
     if not per_key:
         return None
-    combos = [("internal:nll", "internal:shift"), ("behav", "internal:nll"), ("behav", "internal:shift")]
+    combos = [("internal:nll", "internal:shift"), ("behav", "internal:nll"), ("behav", "internal:shift"),
+              ("behav_frame", "internal:nll")]
     names = sorted({n for d in per_key.values() for n in d})
     # keep only keys that have every feature set (rows missing one are skipped by build_X)
     keys = [k for k, d in per_key.items() if all(n in d for n in names)]

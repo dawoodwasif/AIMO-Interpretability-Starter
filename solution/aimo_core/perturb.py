@@ -112,7 +112,26 @@ def distract(text: str, rng: random.Random) -> str:
     return " ".join(sents)
 
 
-RULES = {"rename": rename, "typos": typos, "distract": distract}
+FRAMES = [
+    ("At a regional logistics company, a planner hands the following puzzle to her team before a shift. ",
+     " The team must report exactly the value asked for."),
+    ("During a biology field course, a teaching assistant writes this problem on the whiteboard for the students. ",
+     " The students are asked to give the exact requested value."),
+    ("A sports analytics club uses the following question as its weekly challenge. ",
+     " Members submit only the exact value that is asked for."),
+    ("An engineer preparing a training workshop includes this exercise in the handout. ",
+     " Participants must find the exact quantity requested."),
+]
+
+
+def frame(text: str, rng: random.Random) -> str:
+    """Domain-style framing (EXP-004: official spuriousness is mostly domain-driven).
+    The mathematical statement is kept verbatim inside a real-world setting."""
+    pre, post = FRAMES[rng.randrange(len(FRAMES))]
+    return pre + text.strip() + post
+
+
+RULES = {"rename": rename, "typos": typos, "distract": distract, "frame": frame}
 
 
 def variants(text: str, kinds=("rename", "typos", "distract"), k: int = 1, seed: str = "aimo") -> list[tuple[str, str]]:

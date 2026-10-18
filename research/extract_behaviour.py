@@ -3,10 +3,11 @@
 Runs aimo_core.behaviour.run - greedy decoding of each problem plus its three
 rule-based perturbed copies, forced answers on truncation - for every labeled
 problem of a model, at a fixed token cap that mimics the eval budget.
-Output: data/cache/features/<model_slug>[_<effort>]_behav.npz
-    keys (n,) text hashes, behav (n, 4) [agree, parsed, len, trunc], _meta_max_tokens
+Output: data/cache/features/<model_slug>[_<effort>]_behav.jsonl  (one line per problem:
+    key, kinds, answers, lens, trunc, max_new) - per-copy results, so any subset of copies
+    can be scored offline (H10: with / without the domain-style "frame" copy).
 
-train.py picks this up as feature set "behav" (and "behav+internal:nll").
+train.py derives feature sets "behav" (rename/typos/distract) and "behav_frame" (+ frame).
 
 Usage (GPU box):
     python research/extract_behaviour.py --model Qwen/Qwen3.5-4B --max-tokens 4096 --chunk-problems 16
@@ -14,12 +15,13 @@ Usage (GPU box):
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import time
 
-import numpy as np
-
 from common import CACHE, load_labeled, slug, text_hash
+
+KINDS = ("rename", "typos", "distract", "frame")
 
 
 def main() -> None:
@@ -38,24 +40,22 @@ def main() -> None:
             and (r.get("reasoning_effort") or "default") == (args.effort or "default")]
     texts = {text_hash(r["original_problem"]): r["original_problem"] for r in rows}
     keys = sorted(texts)
-    out = CACHE / "features" / f"{slug(args.model)}{'_' + args.effort if args.effort else ''}_behav.npz"
-    done = {}
+    out = CACHE / "features" / f"{slug(args.model)}{'_' + args.effort if args.effort else ''}_behav.jsonl"
+    done = set()
     if out.exists():
-        z = np.load(out)
-        done = {str(k): v for k, v in zip(z["keys"], z["behav"])}
+        done = {json.loads(l)["key"] for l in open(out)}
     todo = [k for k in keys if k not in done]
     print(f"{len(keys)} labeled problems for {args.model}, {len(todo)} to do")
     tok, model = internals.load_model(args.model)
     t0 = time.monotonic()
+    out.parent.mkdir(parents=True, exist_ok=True)
     for s in range(0, len(todo), args.chunk_problems):
         ks = todo[s:s + args.chunk_problems]
-        f = behaviour.run(tok, model, [texts[k] for k in ks], time.monotonic() + 1e6, min_tokens=1,
-                          max_tokens=args.max_tokens, model_id=args.model, effort=args.effort)
-        done.update(dict(zip(ks, f)))
-        out.parent.mkdir(parents=True, exist_ok=True)
-        kk = sorted(done)
-        np.savez_compressed(out, keys=np.array(kk), behav=np.stack([done[k] for k in kk]).astype(np.float32),
-                            _meta_max_tokens=np.array(args.max_tokens))
+        raw = behaviour.run(tok, model, [texts[k] for k in ks], time.monotonic() + 1e6, kinds=KINDS, min_tokens=1,
+                            max_tokens=args.max_tokens, model_id=args.model, effort=args.effort, return_raw=True)
+        with open(out, "a", encoding="utf-8") as f:
+            for k, r in zip(ks, raw):
+                f.write(json.dumps({"key": k, **r}) + "\n")
         el = time.monotonic() - t0
         print(f"  {s + len(ks)}/{len(todo)} problems, {el:.0f}s ({el / (s + len(ks)):.1f}s/problem)", flush=True)
     print(f"saved {out}")

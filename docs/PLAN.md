@@ -52,6 +52,7 @@
 | H6 | behavioural signal (own base accuracy / answer agreement from a few samples) ranks models within a problem | byeolki samples, split-sample | report; decides test-time sampling | **supported EXP-002** (AUC .74–.76, mixed pairwise .91, n small) |
 | H7 | text-only heads add nothing under balance | EXP-001 | drop if ≤ prior | **confirmed EXP-001** (shared gain = source confound) |
 | H8 | white-box solve-rate probe: ridge on own hidden states → predicted base accuracy p̂ (trained on ALL pool problems × model, solved or not); robust ⇔ high p̂ (batch rank) | self labels + caches | keep if mixed-holdout and holdout ≥ prior+2 | needs GPU |
+| H10 | a cheap domain-style copy (template story frame around the problem) in the shipped perturbations raises the self-consistency / shift signal, because official spuriousness is mostly domain-driven (EXP-004) | add `frame` kind to aimo_core.perturb; compare behav/shift with vs without on GPU caches | keep if holdout ↑ ≥ 2 pts | implementing |
 | H9 | test-time self-consistency: greedy answers on the original + 3 shipped perturbations (deterministic), score = agreement, tie-break shorter reasoning | bundle `behav` route, timing from diag-v1 | keep if mixed-holdout ≥ prior+2 within budget | implementing |
 
 ## NEEDS HUMAN (commands, expected time/cost, what to send back)
