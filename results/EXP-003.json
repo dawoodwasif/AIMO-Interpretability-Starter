@@ -1,0 +1,38 @@
+{
+ "Qwen/Qwen3.5-4B|thr=0.5": {
+  "threshold": 0.6656,
+  "rank": 0.8325
+ },
+ "Skywork/Skywork-OR1-Math-7B|thr=0.5": {
+  "threshold": 0.5803,
+  "rank": 0.64
+ },
+ "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B|thr=0.5": {
+  "threshold": 0.7016,
+  "rank": 0.865
+ },
+ "Qwen/Qwen3.5-4B|thr=0.75": {
+  "threshold": 0.6841,
+  "rank": 0.8325
+ },
+ "Skywork/Skywork-OR1-Math-7B|thr=0.75": {
+  "threshold": 0.6566,
+  "rank": 0.64
+ },
+ "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B|thr=0.75": {
+  "threshold": 0.7844,
+  "rank": 0.865
+ },
+ "Qwen/Qwen3.5-4B|thr=1.0": {
+  "threshold": 0.5,
+  "rank": 0.8325
+ },
+ "Skywork/Skywork-OR1-Math-7B|thr=1.0": {
+  "threshold": 0.5,
+  "rank": 0.64
+ },
+ "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B|thr=1.0": {
+  "threshold": 0.5,
+  "rank": 0.865
+ }
+}

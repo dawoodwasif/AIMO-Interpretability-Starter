@@ -111,3 +111,5 @@ huggingface-hub 1.22.0, joblib 1.5.3, pandas 3.0.3, safetensors 0.8.0, scikit-le
 |------|-------|-----------------------|---------------|-----|---------|-------|
 | — | main | diag-v1-main.zip (sha256 46388f2b73041801) | env probe: cache, load+VRAM, forward, generate tok/s @ batch 1/16/64, behaviour.run timing, ids/efforts/batch sizes; predicts prior (all True) | | | expect ≈0.50; read stderr |
 | — | small | diag-v1-small.zip (sha256 4a82f77902d52e43) | same, small track (does the small worker cache gpt-oss?) | | | optional |
+| — | main | behav-v0-main.zip (sha256 d6604b4d0edf57d8) | EXPERIMENTAL H9+H5: greedy self-consistency on original + 3 rule copies, batch-rank labels; real-route runtime on the worker | | | upload only AFTER diag-v1 (calibrate DECODE_TOK_S); not holdout-validated; ≤2400 s by design (HF max_time) |
+| — | small | behav-v0-small.zip (sha256 4566f449f37b1259) | same, small track | | | optional |

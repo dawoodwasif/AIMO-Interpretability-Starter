@@ -86,6 +86,7 @@ def main() -> None:
     ap.add_argument("--diagnostic", action="store_true",
                     help="add artifacts/diagnostic.json: log env/cache/load/throughput to stderr (priors only)")
     ap.add_argument("--diag-budget", type=float, default=1500)
+    ap.add_argument("--manifest", default=None, help="ship this file as artifacts/manifest.json (experimental configs)")
     args = ap.parse_args()
 
     files = [p for p in SRC.rglob("*") if p.is_file() and "__pycache__" not in p.parts
@@ -94,7 +95,8 @@ def main() -> None:
     errors = check_imports(py)
 
     try:
-        manifest = json.loads((SRC / "artifacts" / "manifest.json").read_text())
+        man_path = Path(args.manifest) if args.manifest else SRC / "artifacts" / "manifest.json"
+        manifest = json.loads(man_path.read_text())
         sys.path.insert(0, str(SRC))
         from aimo_core.linear import LinearHead
 
@@ -121,9 +123,11 @@ def main() -> None:
         out = DIST / f"{name}-{track}.zip"
         with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
             for p in sorted(files):
-                info = zipfile.ZipInfo(p.relative_to(SRC).as_posix(), date_time=(2026, 1, 1, 0, 0, 0))
+                rel = p.relative_to(SRC).as_posix()
+                info = zipfile.ZipInfo(rel, date_time=(2026, 1, 1, 0, 0, 0))
                 info.compress_type = zipfile.ZIP_DEFLATED
-                z.writestr(info, p.read_bytes())
+                data = man_path.read_bytes() if rel == "artifacts/manifest.json" else p.read_bytes()
+                z.writestr(info, data)
             if track == "small":
                 info = zipfile.ZipInfo("small.txt", date_time=(2026, 1, 1, 0, 0, 0))
                 z.writestr(info, "small models track\n")

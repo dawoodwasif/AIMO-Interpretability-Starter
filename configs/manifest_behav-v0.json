@@ -1,0 +1,11 @@
+{
+ "version": 1,
+ "exp": "behav-v0 (experimental, H9+H5; not holdout-validated)",
+ "note": "Test-time self-consistency on original + rename/typos/distract copies (greedy), labelled by batch rank. Token cap from the time share; HF max_time hard stop.",
+ "default_prior": 0.55,
+ "threshold": 0.6,
+ "models": {
+  "*": {"prior": 0.55, "threshold": 0.6, "batch_rank": true, "rank_frac": 0.5, "rank_min_n": 4,
+        "behav": {"weight": 1.0, "min_tokens": 768, "max_tokens": 12288}}
+ }
+}
