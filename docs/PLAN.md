@@ -1,17 +1,26 @@
 # PLAN (living document — update every iteration)
 
-## §0 Current state (2026-10-18, end of session 1)
-- Contract fixed to the OFFICIAL interface (`are_robust(model_id, reasoning_effort, problems: list[str])`,
-  no perturbation type at eval time); run_local.py runs the vendored official ingestion+scoring;
-  build_bundle.py makes `-main` / `-small` (small.txt) ZIPs. `make check` green (31 tests).
-- Ground truth re-verified (docs/COMPETITION.md): balanced-per-problem-and-model test, ~30–50
-  cases, loads ~2–4 s, White-Box Award needs an ablation, AIME 2024–26 leakage advice.
-- Data: official DeepSeek/MATH labels (137) + byeolki self-labels relabelled (153; only 9
-  mixed problems leak-free) + pool of 311 leak-filtered problems + 1499 rule variants.
-- No GPU here; HF and GitHub push blocked from this session (see NEEDS HUMAN).
-- CPU experiments EXP-001..: see EXPERIMENTS.md. Diagnostic bundle ready: submissions/diag-v1-*.zip.
-- **Next:** human runs diag-v1 upload + GPU smoke job; then train internals/shift heads on
-  returned caches (train.py --sources self byeolki official_math).
+## §0 Current state (2026-10-18, end of session 1) — read this first
+- **Contract fixed** to the official interface (`are_robust(model_id, reasoning_effort, problems: list[str])`;
+  no perturbation type at eval). run_local.py runs the vendored official ingestion+scoring; build_bundle.py
+  makes `-main`/`-small` ZIPs (small.txt). `make check` green (34 tests incl. tiny-Llama internals/behaviour
+  and fake-vLLM research-pipeline tests).
+- **Facts** re-verified (docs/COMPETITION.md): test balanced per problem AND per model, ~30–50 cases,
+  loads ~2–4 s, White-Box Award needs an ablation, AIME 2024–26 leakage advice.
+- **Data**: official DeepSeek/MATH labels (137) + byeolki samples relabelled (114 leak-free; only 9 mixed
+  problems) + 311-problem leak-filtered pool + 1499 rule variants. Self-labels need the GPU job.
+- **Findings**: EXP-001 problem-only heads = confound (reject). EXP-002 own solve rate / self-consistency
+  ranks robustness within a problem (pairwise .91, small n). EXP-003 batch-rank labelling +9–15 pts.
+- **Routes implemented, awaiting GPU data**: H8 white-box solve-rate probe (`train.py --solve-probe`),
+  H3/H4 NLL + shift features, H9 test-time self-consistency (`aimo_core/behaviour.py`, cached offline by
+  `research/extract_behaviour.py`). Shipped manifest = priors only (no method has holdout evidence yet).
+- **Bundles**: submissions/diag-v1-{main,small}.zip (upload first), submissions/behav-v0-{main,small}.zip
+  (experimental, after diag-v1).
+- **Blockers**: git push 403 (GitHub App access), no GPU, HF blocked here → NEEDS HUMAN A–D.
+- **Next session**: (1) read diag-v1 stderr → set LOAD_COST_S / PER_ITEM_COST_S / DECODE_TOK_S in
+  config.py; (2) when GPU results land: `cd research && python train.py --exp EXP-004 --solve-probe --dry-run`
+  per model (+ `behav` feature sets), log, decide per model (incl. gpt-oss worth-it), White-Box ablation;
+  (3) /ship the winner for both tracks; (4) fill REPORT.md §4–5.
 
 ## Phases
 1. **Ground truth** — done 2026-10-18 except worker measurements (diag-v1).
