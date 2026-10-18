@@ -1,0 +1,29 @@
+{
+ "zip": "diag-v1-small.zip",
+ "track": "small",
+ "diagnostic": true,
+ "size_mb": 0.02,
+ "sha256_16": "bea7712a12b356ee",
+ "git": "95bef45",
+ "git_dirty_solution": true,
+ "manifest_exp": null,
+ "smoke_fixture": {
+  "accuracy": 0.3333333333333333,
+  "coverage": 1.0,
+  "invalid_predictions": 0,
+  "balanced_accuracy": 0.5,
+  "n": 24,
+  "label_balance": 0.333,
+  "predicted_robust": 24,
+  "runtime_s": 6.5,
+  "timed_out": false,
+  "track": "small",
+  "per_model": {
+   "Qwen/Qwen3.5-4B": 0.333,
+   "Skywork/Skywork-OR1-Math-7B": 0.167,
+   "allenai/Olmo-3-7B-Think": 0.5,
+   "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B": 0.333
+  }
+ },
+ "built": "2026-10-18 14:27"
+}

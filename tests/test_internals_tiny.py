@@ -99,3 +99,13 @@ def test_runtime_uses_internal_head(tiny_model_dir, tmp_path, monkeypatch):
     finally:
         artifacts.manifest.cache_clear()
         artifacts.load_head.cache_clear()
+
+
+def test_diagnostic_probe_runs(tiny_model_dir, capsys):
+    import time
+
+    from aimo_core import diagnostics
+
+    diagnostics._probe_model(tiny_model_dir, time.monotonic() + 60, [1, 2], 4)
+    err = capsys.readouterr().err
+    assert "load=" in err and "generate batch=2" in err and "tok/s" in err

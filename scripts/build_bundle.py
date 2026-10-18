@@ -83,6 +83,9 @@ def main() -> None:
     ap.add_argument("--name", default=None)
     ap.add_argument("--track", choices=["main", "small", "both"], default="both")
     ap.add_argument("--cases", default=str(ROOT / "data" / "fixtures" / "cases.jsonl"))
+    ap.add_argument("--diagnostic", action="store_true",
+                    help="add artifacts/diagnostic.json: log env/cache/load/throughput to stderr (priors only)")
+    ap.add_argument("--diag-budget", type=float, default=1500)
     args = ap.parse_args()
 
     files = [p for p in SRC.rglob("*") if p.is_file() and "__pycache__" not in p.parts
@@ -124,6 +127,10 @@ def main() -> None:
             if track == "small":
                 info = zipfile.ZipInfo("small.txt", date_time=(2026, 1, 1, 0, 0, 0))
                 z.writestr(info, "small models track\n")
+            if args.diagnostic:
+                info = zipfile.ZipInfo("artifacts/diagnostic.json", date_time=(2026, 1, 1, 0, 0, 0))
+                z.writestr(info, json.dumps({"budget_s": args.diag_budget, "gen_batches": [1, 16, 64],
+                                             "gen_tokens": 256}))
         with zipfile.ZipFile(out) as z:
             names = z.namelist()
             assert "solution.py" in names, "solution.py must be at archive root"
@@ -134,7 +141,7 @@ def main() -> None:
             raise SystemExit(f"bundle too large: {mb:.1f} MB")
         m = _smoke(out, args.cases, track == "small")
         digest = hashlib.sha256(out.read_bytes()).hexdigest()[:16]
-        meta = {"zip": out.name, "track": track, "size_mb": round(mb, 2), "sha256_16": digest, "git": sha,
+        meta = {"zip": out.name, "track": track, "diagnostic": args.diagnostic, "size_mb": round(mb, 2), "sha256_16": digest, "git": sha,
                 "git_dirty_solution": dirty, "manifest_exp": manifest.get("exp"), "smoke_fixture": m,
                 "built": time.strftime("%Y-%m-%d %H:%M")}
         (DIST / f"{name}-{track}.json").write_text(json.dumps(meta, indent=1))

@@ -16,7 +16,7 @@ import traceback
 
 import numpy as np
 
-from . import artifacts, clock, config, internals
+from . import artifacts, clock, config, diagnostics, internals
 from .text_features import FEATURE_FUNCS
 
 
@@ -66,6 +66,10 @@ def predict_batch(model_id: str, effort: str, problems) -> list[bool]:
     _log(f"call {call}: model={model_id} effort={effort} n={n} track={config.TRACK} "
          f"share={share:.0f}s elapsed={clock.elapsed():.0f}s")
 
+    try:
+        diagnostics.run_once(model_id, effort, n)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         texts = [problem_text(p) for p in problems]
         heads = [(artifacts.load_head(h["file"]), float(h.get("weight", 1.0)))

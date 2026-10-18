@@ -9,68 +9,74 @@ memory between sessions.
 
 AIMO Interpretability Challenge — <https://aimo-interp.github.io> (authoritative
 over the arXiv paper). Submit a ZIP whose `solution.py` implements
+(verified against the official `components/ingestion_program/ingestion.py`, 2026-10-18)
 
 ```python
-are_robust(model_id: str, problems: list[Problem]) -> list[bool]   # True = robust
-# Problem has ONLY: original_problem: str, permutation_type: list[str]
+are_robust(model_id: str, reasoning_effort: str, problems: list[str]) -> list[bool]  # True = robust
+# called once per (model_id, reasoning_effort) with keywords reasoning_effort=, problems=
+# problems are PLAIN STRINGS. No perturbation type is passed. effort: default|low|medium
 ```
 
-A (problem, model) case is **robust** if the model's accuracy holds under every
-listed perturbation family; **spurious** if at least one family clearly degrades
-it. Metric: plain accuracy on a hidden test set. Ties broken by faster runtime.
+A (problem, model[, effort]) case is **robust** if the model's accuracy holds under
+every perturbation the organizers applied; **spurious** if at least one clearly
+degrades it. Metric: plain accuracy on a hidden test set (~30–50 cases). Ties broken
+by faster average runtime over three trials. **Small-track ZIPs must contain
+`small.txt` at the root; Main-track ZIPs must not** (`build_bundle.py` handles it).
 
 - **Main track** models: `Qwen/Qwen3.5-4B`, `Skywork/Skywork-OR1-Math-7B`,
   `allenai/Olmo-3-7B-Think`, `deepseek-ai/DeepSeek-R1-0528-Qwen3-8B`,
   `openai/gpt-oss-120b`. **Small track**: same minus gpt-oss-120b.
-- Perturbation families: `rephrase, rename, domain, distract, typos,
-  expert_perturbations, expert_no_solution`. A case lists one family or all.
+- Perturbation families used for labels: `rephrase, rename, domain, distract, typos,
+  expert_perturbations, expert_no_solution` (not visible at eval time).
 - **Deadline: submissions close 2026-11-01 (treat 2026-10-31 as real).**
   Report + open-source code due 2026-11-15.
 
 ## 2. Hard constraints (violating any = zero score)
 
 1. **3600 s total** for the whole prediction run, all models together, on one
-   RTX PRO 6000 (96 GB, Blackwell sm_120), 192 CPU cores. A timeout scores 0.
-   Keep `SAFETY_MARGIN_S` ≥ 300 until runtimes are measured on Codabench.
+   RTX PRO 6000 (96 GB, Blackwell sm_120, shared with other jobs), 192 CPU cores.
+   A timeout scores 0. Our rule: worst case ≤ 2400 s (`SAFETY_MARGIN_S` = 1200)
+   using measured timings. Organizers may raise the limit to ~170 s/case (#6).
 2. **Offline.** No network. Models only from the read-only HF cache
    (`local_files_only=True`). Never download at eval time.
 3. **Only these packages exist**: Python stdlib, torch 2.12.1 (CUDA 13.2),
    transformers 5.13.0, accelerate 1.13.0, huggingface_hub 1.22.0, joblib 1.5.3,
    pandas 3.0.3, safetensors 0.8.0, scikit-learn 1.8.0, tokenizers 0.22.2 (+numpy).
    **No vLLM in the eval container.** `scripts/build_bundle.py` enforces this.
-4. Return exactly `len(problems)` real Python `bool`s, same order, never raise.
+4. Return a `list` of exactly `len(problems)` real Python `bool`s, same order, never raise.
 5. Deterministic predictions (no sampling at eval time unless seeded).
 6. No attempts to extract/leak evaluation data → disqualification.
 
-## 3. What is known about the data (verify, then update this section)
+## 3. What is known about the data (verified 2026-10-18; details in docs/COMPETITION.md)
 
 - Official labels come from sampling each model ~10× (temperature 1.0, top_k 40,
   top_p 0.95, ≤100k tokens) on the original and on variants. Qwen3.5-4B uses
-  thinking; gpt-oss-120b used low/medium/high effort.
-- Public data: label is a **conjunction** — robust only if *no* variant degrades
-  (all 13 public rows with exactly one detrimental variant are non-robust). No
-  public row has decay in (0, 0.5): labels have a wide margin. The exact private
-  rule is deliberately unpublished.
+  thinking; gpt-oss-120b used low/medium/high effort. The exact rule is unpublished;
+  labels have a wide margin. Older public sets: robust ⇔ zero detrimental variants.
 - Only originals the model solves (base accuracy ≥ ~0.6) appear.
-- Public labeled data is tiny (val-sample = 28 rows, mostly API models NOT in the
-  competition). The 2026-09-19 rule change **allows extra labeled data**, so
-  self-generated labels on the competition checkpoints are legal and are the
-  main lever. Leaking eval data is still forbidden.
-- Live test set is tiny (~17–21 cases per track ⇒ one case ≈ 5 accuracy
-  points). **Do not overfit the leaderboard.** Trust grouped CV on many labels.
+- **Val and test are balanced per problem and per model** (organizers, Sep 15/16, via
+  Discord): every problem is robust for some models and spurious for others. Problem
+  difficulty / text features and per-model priors therefore carry ~no signal; only
+  model×problem interaction can win. Evaluate offline on *mixed* problems.
+- Extra labeled data is allowed (2026-09-19). Do **not** train on AIME 2024–2026, AIMO
+  2/3 public refs, JMO, problems-public (organizer leakage advice, 2026-10-09).
+- Public labels reachable here: baselines repo CSVs (DeepSeek on 137 MATH problems),
+  byeolki self-labels (MIT; 3 small models × 150 problems, 8k budget). HF datasets
+  (`val-sample`, `train-main-v2`) are blocked from this session → human.
+- Live test set is tiny (~30–50 cases ⇒ one case ≈ 2–3 accuracy points).
+  **Do not overfit the leaderboard.** Trust grouped CV on many labels.
 - Known pitfall (participant report): prompt-only probes mostly predict *solve
   rate*, not robustness. Always compare against a "base accuracy" baseline.
-- Open questions to resolve early (record answers in docs/COMPETITION.md):
-  exact model_ids passed by Codabench; which models are actually cached;
-  whether gpt-oss-120b loads within budget in transformers 5.13 on sm_120;
-  how `expert_no_solution` variants are scored.
+- Load times (README): ~2 s for 4–8B, ~4 s for gpt-oss-120b from warm cache. Using
+  another cached model as a tool is allowed (#11). Measure with the diag bundle.
 
 ## 4. Repo map
 
 ```
-solution/                 <- EXACTLY what ships (zip root)
+solution/                 <- EXACTLY what ships (zip root; small.txt added per track)
   solution.py             contract entry point (tiny, never raises)
-  aimo_core/              runtime, time budget, text + internal features, heads
+  aimo_core/              runtime, time budget, text + internal features, heads,
+                          perturb.py (shipped rules), diagnostics.py (diag bundles)
   artifacts/              manifest.json + *.npz heads (written by research/train.py)
 research/                 offline only (never imported by solution/)
   fetch_data.py           official HF datasets -> data/labeled/official_*.jsonl
@@ -79,8 +85,10 @@ research/                 offline only (never imported by solution/)
   gen_labels.py           self-labels for a competition model (GPU)
   extract_features.py     cache ALL-layer internals with the shipped code (GPU)
   train.py                grouped-CV head selection + holdout + export
+third_party/getting-started/components  official ingestion + scoring (vendored)
+submissions/              upload-ready ZIPs (tracked) + build metadata
 scripts/
-  run_local.py            Codabench-like scorer (subprocess + hard timeout)
+  run_local.py            runs the OFFICIAL ingestion+scoring (subprocess + timeout)
   build_bundle.py         zip + import allowlist + smoke + determinism checks
   gpu_job.sh              one-command GPU pipeline for a human to run
 tests/                    contract tests (must stay green)
@@ -130,8 +138,8 @@ Rules of evidence:
    forwards — no generation.
 5. Short-budget behavioural checks for small models only if timing allows
    (e.g. ≤64 greedy tokens of the answer after a forced "\\boxed{" prefix).
-6. gpt-oss-120b: first verify it loads in time. If not, ship priors/text heads
-   for it and spend the budget on the four small models.
+6. gpt-oss-120b: README says it loads in ~4 s (MXFP4, 62 GiB); verify with the
+   diag bundle, then decide per model whether internals beat priors on holdout.
 
 Time budget sketch (measure, then edit `config.py`): load ≈ 60–90 s per 7–8B
 model, gpt-oss-120b unknown; cases per model are few, so forward passes are cheap.
@@ -147,7 +155,8 @@ model, gpt-oss-120b unknown; cases per model are few, so forward passes are chea
   "NEEDS HUMAN", and keep working on CPU tasks. Results come back as commits
   (`data/labeled/self_*.jsonl`, `data/cache/features/*.npz` via git LFS or a
   release asset — small enough to commit if fp16 and few problems).
-- Codabench uploads require the human. Prepare `dist/latest.zip` plus a line in
+- Codabench uploads require the human. Copy the ZIPs to the tracked `submissions/`
+  folder (dist/ is gitignored and this sandbox is remote), add a line in
   `docs/COMPETITION.md` stating what it tests; the human pastes back the score.
 - Diagnostic submissions are valuable: e.g. a bundle that logs model_ids,
   cached models, load times and GPU name to stderr (visible in the submission
@@ -161,8 +170,8 @@ make test         # pytest
 make check        # test + fixture eval + bundle build (run before every commit)
 make fetch        # official datasets -> data/labeled/
 python research/train.py --exp EXP-001
-python scripts/run_local.py solution --cases data/labeled/official_val-sample.jsonl --no-internals
-python scripts/build_bundle.py --name main-v1
+python scripts/run_local.py solution --cases data/labeled/official_val-sample.jsonl --no-internals [--small]
+python scripts/build_bundle.py --name v1          # -> dist/v1-main.zip + dist/v1-small.zip
 ```
 
 ## 9. Definition of done (by 2026-10-30)

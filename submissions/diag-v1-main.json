@@ -1,0 +1,31 @@
+{
+ "zip": "diag-v1-main.zip",
+ "track": "main",
+ "diagnostic": true,
+ "size_mb": 0.02,
+ "sha256_16": "9ad713a8b9fe79e5",
+ "git": "95bef45",
+ "git_dirty_solution": true,
+ "manifest_exp": null,
+ "smoke_fixture": {
+  "accuracy": 0.4166666666666667,
+  "coverage": 1.0,
+  "invalid_predictions": 0,
+  "balanced_accuracy": 0.5,
+  "n": 36,
+  "label_balance": 0.417,
+  "predicted_robust": 36,
+  "runtime_s": 6.6,
+  "timed_out": false,
+  "track": "main",
+  "per_model": {
+   "Qwen/Qwen3.5-4B": 0.333,
+   "Skywork/Skywork-OR1-Math-7B": 0.167,
+   "allenai/Olmo-3-7B-Think": 0.5,
+   "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B": 0.333,
+   "openai/gpt-oss-120b@low": 0.5,
+   "openai/gpt-oss-120b@medium": 0.667
+  }
+ },
+ "built": "2026-10-18 14:26"
+}
