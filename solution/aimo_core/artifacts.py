@@ -7,15 +7,17 @@ manifest.json schema
   "default_prior": 0.5,                 # P(robust) when nothing else is known
   "threshold": 0.5,                     # global decision threshold
   "models": {
-    "<hf model id or '*'>": {
+    "<hf model id>[@<reasoning_effort>] or '*'": {
       "prior": 0.45,                    # P(robust) for this model
-      "perm_prior": {"typos": 0.7},     # optional P(robust | single perm type)
       "threshold": 0.5,                 # optional per-model threshold
+      "batch_rank": false,              # optional: label the top `rank_frac` of the
+      "rank_frac": 0.5,                 #   batch robust (see runtime.py)
       "heads": [ {"file": "deepseek_text.npz", "weight": 1.0} ]
     }
   }
 }
-'*' is the shared/fallback entry used for unknown models.
+Lookup order: "<id>@<effort>", "<id>", alias, basename match, then '*'
+(the shared/fallback entry used for unknown models).
 """
 from __future__ import annotations
 
@@ -51,10 +53,12 @@ def manifest() -> dict:
         return {"version": 1, "default_prior": 0.5, "threshold": 0.5, "models": {}}
 
 
-def model_entry(model_id: str) -> dict:
+def model_entry(model_id: str, effort: str = "default") -> dict:
     models = manifest().get("models", {})
-    if model_id in models:
-        return models[model_id]
+    model_id = config.MODEL_ALIASES.get(model_id, model_id)
+    for key in (f"{model_id}@{effort}", model_id):
+        if key in models:
+            return models[key]
     want = _norm(model_id)
     for key, val in models.items():
         if _norm(key) == want:

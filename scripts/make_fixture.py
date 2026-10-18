@@ -1,7 +1,8 @@
 """Write a small synthetic fixture (data/fixtures/cases.jsonl) for offline tests.
 
 Labels are synthetic and meaningless - the fixture only checks the contract,
-timing and determinism. Never report accuracy on it.
+timing and determinism. Never report accuracy on it. Like the real test set,
+each problem appears for several models, and gpt-oss appears at two efforts.
 """
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "solution"))
-from aimo_core.config import KNOWN_MODELS, PERTURBATION_TYPES  # noqa: E402
+from aimo_core.config import KNOWN_MODELS  # noqa: E402
 
 TEMPLATES = [
     "Find the remainder when $3^{{{a}}}$ is divided by ${b}$.",
@@ -28,13 +29,16 @@ def main() -> None:
     out = ROOT / "data" / "fixtures" / "cases.jsonl"
     out.parent.mkdir(parents=True, exist_ok=True)
     rows = []
-    for mi, mid in enumerate(KNOWN_MODELS):
+    probs = [TEMPLATES[k % len(TEMPLATES)].format(a=rng.randint(10, 999), b=rng.randint(3, 97)) for k in range(8)]
+    groups = [(m, "default") for m in KNOWN_MODELS[:-1]] + [(KNOWN_MODELS[-1], "low"), (KNOWN_MODELS[-1], "medium")]
+    for gi, (mid, eff) in enumerate(groups):
         for k in range(6):
-            t = TEMPLATES[(k + mi) % len(TEMPLATES)].format(a=rng.randint(10, 999), b=rng.randint(3, 97))
-            types = list(PERTURBATION_TYPES) if k % 3 == 0 else [rng.choice(PERTURBATION_TYPES)]
-            rows.append({"case_id": f"fx-{mi}-{k}", "problem_id": f"p{(k + mi) % 5}", "model_id": mid,
-                         "original_problem": t, "permutation_type": types, "label": rng.random() < 0.5,
-                         "source": "fixture"})
+            pi = (k + gi) % len(probs)
+            row = {"case_id": f"fx-{gi}-{k}", "problem_id": f"p{pi}", "model_id": mid,
+                   "original_problem": probs[pi], "label": rng.random() < 0.5, "source": "fixture"}
+            if eff != "default":
+                row["reasoning_effort"] = eff
+            rows.append(row)
     with open(out, "w") as f:
         for r in rows:
             f.write(json.dumps(r) + "\n")
