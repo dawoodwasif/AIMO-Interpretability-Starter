@@ -9,8 +9,10 @@
   loads ~2–4 s, White-Box Award needs an ablation, AIME 2024–26 leakage advice.
 - **Data**: official DeepSeek/MATH labels (137) + byeolki samples relabelled (114 leak-free; only 9 mixed
   problems) + 311-problem leak-filtered pool + 1499 rule variants. Self-labels need the GPU job.
-- **Findings**: EXP-001 problem-only heads = confound (reject). EXP-002 own solve rate / self-consistency
-  ranks robustness within a problem (pairwise .91, small n). EXP-003 batch-rank labelling +9–15 pts.
+- **Findings**: EXP-001 problem-only heads = confound (reject). EXP-002/2b own self-consistency on the
+  original ranks robustness within a problem (pairwise .91, **test_sim .68**, n=28). EXP-003 batch-rank
+  +9–15 pts. EXP-004 domain family causes most official spuriousness → H10 frame copy. EXP-005 within-model
+  AUC is difficulty-confounded → **decide on `research/ablate.py` test_sim** (CLAUDE.md §5).
 - **Routes implemented, awaiting GPU data**: H8 white-box solve-rate probe (`train.py --solve-probe`),
   H3/H4 NLL + shift features, H9 test-time self-consistency (`aimo_core/behaviour.py`, cached offline by
   `research/extract_behaviour.py`). Shipped manifest = priors only (no method has holdout evidence yet).
@@ -18,8 +20,9 @@
   (experimental, after diag-v1).
 - **Blockers**: git push 403 (GitHub App access), no GPU, HF blocked here → NEEDS HUMAN A–D.
 - **Next session**: (1) read diag-v1 stderr → set LOAD_COST_S / PER_ITEM_COST_S / DECODE_TOK_S in
-  config.py; (2) when GPU results land: `cd research && python train.py --exp EXP-004 --solve-probe --dry-run`
-  per model (+ `behav` feature sets), log, decide per model (incl. gpt-oss worth-it), White-Box ablation;
+  config.py; (2) when GPU results land: `cd research && python ablate.py --exp EXP-010` (routes + White-Box
+  ablation on test_sim) and `python train.py --exp EXP-011 --solve-probe --dry-run`; decide per model
+  (incl. whether gpt-oss is worth its time);
   (3) /ship the winner for both tracks; (4) fill REPORT.md §4–5.
 
 ## Phases

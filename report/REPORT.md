@@ -58,7 +58,10 @@ per-model-prior baselines and separately on mixed problems.
 |---|---|---|---|
 | EXP-001 | priors + problem-only text/meta heads | per model ≤ majority; shared head +2.6 pts over model prior from dataset-source confound | reject |
 | EXP-002 | solve-rate/self-consistency from 4 held-out samples | AUC 0.74–0.76; within-problem pairwise 0.91 (17 pairs) | pursue (H8, H9) |
+| EXP-002b | same signal on the test-shaped metric (test_sim) | 0.68 (n=28 mixed rows, SE≈.09) vs chance 0.50 | current best |
 | EXP-003 | batch rank vs threshold on balanced batches | +9–15 pts (Qwen, DeepSeek), −2 (Skywork) | keep |
+| EXP-004 | which official families cause spuriousness (DeepSeek/MATH) | domain detrimental in 88% of problems, sole cause in 54/105 spurious cases; typos 5%, rename 9% | add domain-style copy (H10), gpt-oss-written domain variants in self-labels |
+| EXP-005 | metric control: probe on a *random* network | within-model AUC 0.73 but test_sim 0.29 | decide on test_sim only |
 | … | white-box probes, NLL, shift, ablations | TBD | |
 
 **White-Box ablation (for the award):** TBD — full system vs. the same system with the white-box
@@ -74,7 +77,14 @@ route removed, per model, on holdout and Codabench.
 - **Rule-based perturbations ≠ official families.** The organizers' detrimental variants are mostly
   LLM-written `domain`/`rephrase` (written by gpt-oss-120b at low effort); rule-based rename/typos/
   distract rarely change answers. Our self-labels add gpt-oss-written families for that reason.
-- TBD: probe-vs-solve-rate confound, shift features, gpt-oss cost/benefit.
+- **Within-model metrics are confounded by difficulty.** A solve-rate probe on a randomly initialised
+  network reaches within-model AUC 0.73 (problem length/difficulty predict robustness *within* a model),
+  yet falls to 0.29 on the test-shaped metric (EXP-005). We therefore evaluate every method on mixed
+  problems with per-model batch-rank labelling, pooled over models (`test_sim`).
+- **Official spuriousness is mostly a domain-transfer failure** (EXP-004), so cheap rule-based
+  perturbations probe the wrong axis; we add a domain-style framing copy and gpt-oss-written domain
+  variants.
+- TBD: probe-vs-solve-rate confound on real activations, shift features, gpt-oss cost/benefit.
 
 ## 6. Reproduction
 ```bash

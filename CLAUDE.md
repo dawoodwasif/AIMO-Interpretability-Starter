@@ -117,6 +117,12 @@ Every iteration:
 Rules of evidence:
 - Primary offline metric = **holdout accuracy on unseen problems**, grouped by
   problem_id. Never shuffle rows of the same problem across folds.
+- Because the test is balanced per problem, the **binding** number is `test_sim`
+  from `research/ablate.py`: out-of-fold scores on *mixed* problems (both labels
+  across models), labelled per model by batch rank, pooled over models. Within-model
+  AUC/holdout is inflated by problem difficulty (EXP-005: random features score
+  AUC 0.73 within model but test_sim 0.29). Keep a method only if test_sim beats
+  0.5 (chance) and the previous best by ≥ 2 pts, AND per-model holdout ≥ prior.
 - Always report the prior baseline and an "always-majority" baseline next to it.
 - Evaluate per model; a shared head must not hide a model where it loses.
 - A Codabench score is one noisy sample of ~20 cases; never pick a method on
