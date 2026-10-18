@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "note": "Placeholder. research/train.py overwrites this with trained heads and priors.",
+  "default_prior": 0.5,
+  "threshold": 0.5,
+  "models": {
+    "*": {"prior": 0.55, "heads": []}
+  }
+}

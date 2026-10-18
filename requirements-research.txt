@@ -1,0 +1,7 @@
+# CPU research tooling. scikit-learn pinned to the competition runtime version.
+numpy
+scikit-learn==1.8.0
+pandas
+datasets
+huggingface_hub
+pytest

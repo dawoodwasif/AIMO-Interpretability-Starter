@@ -1,0 +1,6 @@
+# GPU box only (label generation + activation caching).
+# Match the eval container for anything whose outputs ship (internals): transformers 5.13.0.
+torch
+transformers==5.13.0
+accelerate==1.13.0
+vllm
