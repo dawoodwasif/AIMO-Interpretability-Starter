@@ -85,19 +85,30 @@ def predict_batch(model_id: str, effort: str, problems) -> list[bool]:
             scores.append(h.proba(X))
             weights.append(w)
 
-        if deep and internals.available():
+        behav = entry.get("behav")
+        if (deep or behav) and internals.available():
             est = config.cost(config.LOAD_COST_S, model_id) + n * config.cost(config.PER_ITEM_COST_S, model_id)
             if est <= share:
-                deadline = time.monotonic() + share
+                deadline = t_start + share
                 tok = model = None
                 try:
                     tok, model = internals.load_model(model_id)
-                    feats = internals.features_for([h.feature_set for h, _ in deep], tok, model, texts,
-                                                   deadline=deadline)
-                    for h, w in deep:
-                        if h.feature_set in feats:
-                            scores.append(h.proba(feats[h.feature_set]))
-                            weights.append(w)
+                    if deep:
+                        feats = internals.features_for([h.feature_set for h, _ in deep], tok, model, texts,
+                                                       deadline=deadline, effort=effort)
+                        for h, w in deep:
+                            if h.feature_set in feats:
+                                scores.append(h.proba(feats[h.feature_set]))
+                                weights.append(w)
+                    if behav:
+                        from . import behaviour
+
+                        bf = behaviour.run(tok, model, texts, deadline, min_tokens=int(behav.get("min_tokens", 512)),
+                                           max_tokens=int(behav.get("max_tokens", 16384)), model_id=model_id,
+                                           effort=effort)
+                        if bf is not None:
+                            scores.append(behaviour.score(bf))
+                            weights.append(float(behav.get("weight", 1.0)))
                 except Exception as exc:  # noqa: BLE001
                     _log(f"internals failed for {model_id}: {exc!r}")
                 finally:

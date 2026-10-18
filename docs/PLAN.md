@@ -53,7 +53,7 @@ dawoodwasif/AIMO-Interpretability-Starter". Reconnect GitHub at https://claude.a
 and install the Claude GitHub App on the repo. Until then commits stay local in the session.
 
 **B. Upload the diagnostic bundle (2 min of your time; ~10–25 min run).**
-Main track: `submissions/diag-v1-main.zip` (sha256 9ad713a8b9fe79e5). Optional Small:
+Main track: `submissions/diag-v1-main.zip` (sha256 46388f2b73041801). Optional Small:
 `submissions/diag-v1-small.zip`. It predicts all-True (expect ≈ 0.50) and prints `[diag]`
 lines to stderr: GPU, cached models, per-model load time + VRAM, forward cost, generate tok/s.
 Send back: the score, runtime, and the full stderr from the submission detail panel.

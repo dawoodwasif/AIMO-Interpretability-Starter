@@ -132,17 +132,35 @@ def cv(X, y, groups, C, pca_k, folds):
     return metrics(y, score >= 0.5), score
 
 
+def _npz(path, prefix):
+    z = np.load(path)
+    keys = [str(k) for k in z["keys"]]
+    return {k: {n: z[n][i].astype(np.float64) for n in z.files if n.startswith(prefix)} for i, k in enumerate(keys)}
+
+
 def load_cache(target):
+    """(key -> row index, {feature_set: matrix}) merging internals and behaviour caches."""
     mid, _, eff = target.partition("@")
-    for name in ([f"{slug(mid)}_{eff}"] if eff else []) + [slug(mid)]:
-        p = CACHE / "features" / f"{name}.npz"
-        if p.exists():
-            z = np.load(p)
-            feats = {k: z[k].astype(np.float64) for k in z.files if k.startswith("internal:")}
-            if "internal:nll" in feats and "internal:shift" in feats:
-                feats["internal:nll+internal:shift"] = np.concatenate([feats["internal:nll"], feats["internal:shift"]], 1)
-            return {str(k): i for i, k in enumerate(z["keys"])}, feats
-    return None
+    per_key = {}
+    for suffix, prefix in (("", "internal:"), ("_behav", "behav")):
+        for name in ([f"{slug(mid)}_{eff}{suffix}"] if eff else []) + [f"{slug(mid)}{suffix}"]:
+            p = CACHE / "features" / f"{name}.npz"
+            if p.exists():
+                for k, d in _npz(p, prefix).items():
+                    per_key.setdefault(k, {}).update(d)
+                break
+    if not per_key:
+        return None
+    combos = [("internal:nll", "internal:shift"), ("behav", "internal:nll"), ("behav", "internal:shift")]
+    names = sorted({n for d in per_key.values() for n in d})
+    # keep only keys that have every feature set (rows missing one are skipped by build_X)
+    keys = [k for k, d in per_key.items() if all(n in d for n in names)]
+    idx = {k: i for i, k in enumerate(keys)}
+    feats = {n: np.stack([per_key[k][n] for k in keys]) for n in names}
+    for a, b in combos:
+        if a in feats and b in feats:
+            feats[f"{a}+{b}"] = np.concatenate([feats[a], feats[b]], 1)
+    return idx, feats
 
 
 def build_X(fs, rows, cache):

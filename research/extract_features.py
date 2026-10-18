@@ -26,7 +26,7 @@ from common import CACHE, POOL, load_labeled, read_jsonl, slug, text_hash
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
-    ap.add_argument("--effort", default=None, help="tag only (prompt features do not depend on effort)")
+    ap.add_argument("--effort", default=None, help="gpt-oss: reasoning effort passed to the chat template")
     ap.add_argument("--n-layers", type=int, default=12)
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--no-pool", action="store_true", help="only labeled texts")
@@ -47,7 +47,8 @@ def main() -> None:
     L = internals.n_layers(model)
     layers = sorted({int(round(x)) for x in np.linspace(1, L, args.n_layers)} | set(internals.shift_layers(model)))
     t0 = time.monotonic()
-    feats = internals.extract(tok, model, [texts[k] for k in keys], layers=layers, batch_size=args.batch, shift=True)
+    feats = internals.extract(tok, model, [texts[k] for k in keys], layers=layers, batch_size=args.batch, shift=True,
+                              effort=args.effort)
     dt = time.monotonic() - t0
     per = dt / max(1, len(keys))
     print(f"load {load_s:.1f}s; extracted {len(feats)} feature sets in {dt:.1f}s ({per:.3f}s/problem incl. "

@@ -109,3 +109,32 @@ def test_diagnostic_probe_runs(tiny_model_dir, capsys):
     diagnostics._probe_model(tiny_model_dir, time.monotonic() + 60, [1, 2], 4)
     err = capsys.readouterr().err
     assert "load=" in err and "generate batch=2" in err and "tok/s" in err
+
+
+def test_behaviour_route(tiny_model_dir, tmp_path, monkeypatch):
+    """Self-consistency route: features, forced answers on truncation, runtime wiring, determinism."""
+    import time
+
+    from aimo_core import artifacts, behaviour, config, internals, runtime
+
+    tok, model = internals.load_model(tiny_model_dir, device="cpu")
+    monkeypatch.setitem(config.DECODE_TOK_S, "_default", 1000.0)
+    f1 = behaviour.run(tok, model, PROBLEMS, time.monotonic() + 60, min_tokens=4, max_tokens=8)
+    f2 = behaviour.run(tok, model, PROBLEMS, time.monotonic() + 60, min_tokens=4, max_tokens=8)
+    assert f1.shape == (3, len(behaviour.FEATURE_NAMES)) and np.allclose(f1, f2)
+    assert (f1[:, 3] >= 0).all() and ((0 <= behaviour.score(f1)) & (behaviour.score(f1) <= 1)).all()
+    assert behaviour.run(tok, model, PROBLEMS, time.monotonic() + 0.001, min_tokens=512) is None  # no time
+    assert behaviour.extract_answer("so \\boxed{1,024}.") == "1024"
+
+    (tmp_path / "manifest.json").write_text(json.dumps(
+        {"threshold": 0.5, "models": {"tiny": {"prior": 0.0, "batch_rank": True,
+                                               "behav": {"min_tokens": 4, "max_tokens": 8}}}}))
+    monkeypatch.setattr(config, "ARTIFACT_DIR", str(tmp_path))
+    monkeypatch.setattr(config, "DISABLE_INTERNALS", False)
+    monkeypatch.setattr(internals, "load_model", lambda mid, device=None: (tok, model))
+    artifacts.manifest.cache_clear()
+    try:
+        out = runtime.predict_batch("tiny", "default", PROBLEMS)
+        assert len(out) == 3 and all(type(x) is bool for x in out)
+    finally:
+        artifacts.manifest.cache_clear()

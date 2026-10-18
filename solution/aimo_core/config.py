@@ -53,6 +53,13 @@ PER_ITEM_COST_S = {
     "_default": 1.0,
 }
 
+# Per-sequence greedy decode speed (tok/s) with HF generate on the worker GPU.
+# GUESSES until diag-v1 measures them (behaviour.py keeps 35% slack on top).
+DECODE_TOK_S = {
+    "openai/gpt-oss-120b": 12.0,
+    "_default": 18.0,
+}
+
 DISABLE_INTERNALS = os.environ.get("AIMO_DISABLE_INTERNALS", "0") == "1"
 
 # ---- prompt used for internal features (must match training!) -------------

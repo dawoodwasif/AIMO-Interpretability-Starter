@@ -3,8 +3,8 @@
  "track": "small",
  "diagnostic": true,
  "size_mb": 0.02,
- "sha256_16": "bea7712a12b356ee",
- "git": "95bef45",
+ "sha256_16": "4a82f77902d52e43",
+ "git": "a2daad6",
  "git_dirty_solution": true,
  "manifest_exp": null,
  "smoke_fixture": {
@@ -15,7 +15,7 @@
   "n": 24,
   "label_balance": 0.333,
   "predicted_robust": 24,
-  "runtime_s": 6.5,
+  "runtime_s": 6.9,
   "timed_out": false,
   "track": "small",
   "per_model": {
@@ -25,5 +25,5 @@
    "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B": 0.333
   }
  },
- "built": "2026-10-18 14:27"
+ "built": "2026-10-18 14:42"
 }

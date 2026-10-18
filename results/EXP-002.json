@@ -4,24 +4,24 @@
   "min_base": 0.5,
   "robust_max": 0.125,
   "spurious_min": 0.25,
-  "allow_leak": true
+  "allow_leak": false
  },
- "n": 174,
- "robust_rate": 0.586,
+ "n": 130,
+ "robust_rate": 0.615,
  "auc": {
-  "acc_A": 0.742,
-  "agree_A": 0.726,
-  "len_A": 0.33,
-  "trunc_A": 0.333,
-  "parsed_A": 0.541
+  "acc_A": 0.758,
+  "agree_A": 0.735,
+  "len_A": 0.315,
+  "trunc_A": 0.316,
+  "parsed_A": 0.531
  },
  "mixed_pairwise": {
-  "acc_A": 0.833,
-  "agree_A": 0.833,
-  "len_A": 0.238,
-  "trunc_A": 0.238,
-  "parsed_A": 0.524
+  "acc_A": 0.912,
+  "agree_A": 0.912,
+  "len_A": 0.235,
+  "trunc_A": 0.235,
+  "parsed_A": 0.529
  },
- "mixed_problems": 14,
- "mixed_pairs": 21
+ "mixed_problems": 11,
+ "mixed_pairs": 17
 }

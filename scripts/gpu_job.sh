@@ -64,7 +64,17 @@ fi
 if has features; then
   for M in $MODELS; do
     echo "=== features $M ==="
-    (cd research && HF_HUB_OFFLINE=1 ../.venv-eval/bin/python extract_features.py --model "$M")
+    if [ "$M" = openai/gpt-oss-120b ]; then
+      for E in $GPT_EFFORTS; do (cd research && HF_HUB_OFFLINE=1 ../.venv-eval/bin/python extract_features.py --model "$M" --effort "$E"); done
+    else
+      (cd research && HF_HUB_OFFLINE=1 ../.venv-eval/bin/python extract_features.py --model "$M")
+    fi
+    # H9: shipped test-time self-consistency on every labeled problem (resumable), ~1 h/model
+    if [ "$M" = openai/gpt-oss-120b ]; then EFF_LIST="$GPT_EFFORTS"; else EFF_LIST="default"; fi
+    for E in $EFF_LIST; do
+      EA=""; [ "$E" != default ] && EA="--effort $E"
+      (cd research && HF_HUB_OFFLINE=1 ../.venv-eval/bin/python extract_behaviour.py --model "$M" $EA --max-tokens ${BEHAV_TOK:-4096})
+    done
   done
 fi
 echo "Done ($MODE). Log: $LOG. Commit and push:"

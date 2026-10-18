@@ -80,12 +80,13 @@ def unload(model) -> None:
         pass
 
 
-def format_prompt(tok, problem: str) -> str:
+def format_prompt(tok, problem: str, effort: str | None = None) -> str:
     msgs = [{"role": "system", "content": config.SYSTEM_PROMPT},
             {"role": "user", "content": problem}]
+    kw = {"reasoning_effort": effort} if effort and effort != "default" else {}
     for m in (msgs, [{"role": "user", "content": config.SYSTEM_PROMPT + "\n\n" + problem}]):
         try:
-            return tok.apply_chat_template(m, tokenize=False, add_generation_prompt=True)
+            return tok.apply_chat_template(m, tokenize=False, add_generation_prompt=True, **kw)
         except Exception:  # noqa: BLE001 - template may reject system role / be missing
             continue
     return config.SYSTEM_PROMPT + "\n\n" + problem + "\n"
@@ -107,11 +108,11 @@ def nll_stats(nll: np.ndarray, problem: str) -> np.ndarray:
     return np.asarray(v, dtype=np.float32)
 
 
-def _forward(tok, model, problems, layers, batch_size, deadline, want_states=True):
+def _forward(tok, model, problems, layers, batch_size, deadline, want_states=True, effort=None):
     """Run prompts; return per-layer last/mean states, logit stats and problem-span NLL stats."""
     import torch
 
-    texts = [format_prompt(tok, p) for p in problems]
+    texts = [format_prompt(tok, p, effort) for p in problems]
     out: dict[str, list[np.ndarray]] = {}
     dev = next(model.parameters()).device
     for start in range(0, len(texts), batch_size):
@@ -179,7 +180,7 @@ def _cos_dist(a, b):
 
 def extract(tok, model, problems: list[str], layers: list[int] | None = None,
             batch_size: int | None = None, deadline: float | None = None,
-            shift: bool = False) -> dict[str, np.ndarray]:
+            shift: bool = False, effort: str | None = None) -> dict[str, np.ndarray]:
     """Return {feature_set_name: array[n, d]}.
 
     layers=None -> all layers (use offline to cache everything once).
@@ -189,11 +190,11 @@ def extract(tok, model, problems: list[str], layers: list[int] | None = None,
     batch_size = batch_size or config.FORWARD_BATCH
     sl = shift_layers(model) if shift else []
     need = None if layers is None else sorted(set(layers) | set(sl))
-    feats = _forward(tok, model, problems, need, batch_size, deadline)
+    feats = _forward(tok, model, problems, need, batch_size, deadline, effort=effort)
     if shift:
         var = [perturb.variants(p, SHIFT_KINDS, k=1) for p in problems]
         flat = [v for vs in var for _, v in vs]
-        pf = _forward(tok, model, flat, sl, batch_size, deadline)
+        pf = _forward(tok, model, flat, sl, batch_size, deadline, effort=effort)
         K = len(SHIFT_KINDS)
         rows = []
         for i in range(len(problems)):
@@ -227,10 +228,10 @@ def layers_needed(feature_sets: list[str]) -> list[int]:
     return sorted(idx)
 
 
-def features_for(feature_sets: list[str], tok, model, problems: list[str], deadline=None) -> dict:
+def features_for(feature_sets: list[str], tok, model, problems: list[str], deadline=None, effort=None) -> dict:
     """Compute exactly what a set of heads needs (used by the runtime)."""
     feats = extract(tok, model, problems, layers=layers_needed(feature_sets), deadline=deadline,
-                    shift=any("internal:shift" in fs.split("+") for fs in feature_sets))
+                    shift=any("internal:shift" in fs.split("+") for fs in feature_sets), effort=effort)
     # concatenated sets, e.g. "internal:nll+internal:shift"
     for fs in feature_sets:
         if "+" in fs:

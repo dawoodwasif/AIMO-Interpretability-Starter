@@ -118,6 +118,14 @@ def _probe_model(mid: str, deadline: float, gen_batches, gen_tokens: int) -> Non
             peak = torch.cuda.max_memory_allocated() / 2**30 if torch.cuda.is_available() else 0
             _log(f"{mid}: generate batch={b} new_tokens={gen_tokens}: {dt:.1f}s -> {new / dt:.0f} tok/s "
                  f"(peak_alloc={peak:.1f}GiB)")
+        if time.monotonic() < deadline:
+            from . import behaviour
+
+            t = time.monotonic()
+            f = behaviour.run(tok, model, [SYNTH] * 4, time.monotonic() + 300, min_tokens=1, max_tokens=1024,
+                              model_id=mid, effort="low" if "gpt-oss" in mid else None)
+            _log(f"{mid}: behaviour.run 4 problems x 4 copies @1024 tok: {time.monotonic() - t:.1f}s "
+                 f"feats={None if f is None else f.round(2).tolist()}")
     except Exception as exc:  # noqa: BLE001
         _log(f"{mid}: probe error: {exc!r}")
     finally:

@@ -109,5 +109,5 @@ huggingface-hub 1.22.0, joblib 1.5.3, pandas 3.0.3, safetensors 0.8.0, scikit-le
 ## Codabench submission log
 | date | track | bundle (submissions/) | what it tests | acc | runtime | notes |
 |------|-------|-----------------------|---------------|-----|---------|-------|
-| — | main | diag-v1-main.zip (sha256 9ad713a8b9fe79e5) | env probe: cache, load, forward, generate tok/s, ids/efforts/batch sizes; predicts prior (all True) | | | expect ≈0.50; read stderr |
-| — | small | diag-v1-small.zip (sha256 bea7712a12b356ee) | same, small track (does the small worker cache gpt-oss?) | | | optional |
+| — | main | diag-v1-main.zip (sha256 46388f2b73041801) | env probe: cache, load+VRAM, forward, generate tok/s @ batch 1/16/64, behaviour.run timing, ids/efforts/batch sizes; predicts prior (all True) | | | expect ≈0.50; read stderr |
+| — | small | diag-v1-small.zip (sha256 4a82f77902d52e43) | same, small track (does the small worker cache gpt-oss?) | | | optional |

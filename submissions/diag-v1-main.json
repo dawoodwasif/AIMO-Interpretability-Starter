@@ -3,8 +3,8 @@
  "track": "main",
  "diagnostic": true,
  "size_mb": 0.02,
- "sha256_16": "9ad713a8b9fe79e5",
- "git": "95bef45",
+ "sha256_16": "46388f2b73041801",
+ "git": "a2daad6",
  "git_dirty_solution": true,
  "manifest_exp": null,
  "smoke_fixture": {
@@ -15,7 +15,7 @@
   "n": 36,
   "label_balance": 0.417,
   "predicted_robust": 36,
-  "runtime_s": 6.6,
+  "runtime_s": 6.8,
   "timed_out": false,
   "track": "main",
   "per_model": {
@@ -27,5 +27,5 @@
    "openai/gpt-oss-120b@medium": 0.667
   }
  },
- "built": "2026-10-18 14:26"
+ "built": "2026-10-18 14:42"
 }
