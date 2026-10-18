@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+dist/
+data/cache/
+data/raw/hf/
+data/val-sample/
+results/tmp/
+# cloned reference repos (see third_party/README.md); only vendored pieces are tracked
+third_party/*
+!third_party/README.md
+!third_party/getting-started/
+third_party/getting-started/*
+!third_party/getting-started/components/
+!third_party/getting-started/Dockerfile.competition
+!third_party/getting-started/README.md
