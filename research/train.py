@@ -28,7 +28,7 @@ from collections import Counter, defaultdict
 
 import numpy as np
 from sklearn.decomposition import PCA
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GroupKFold
 
@@ -122,6 +122,49 @@ def balanced_batches(y, score, thr=0.5, size=8, reps=400, seed=0):
     return {"threshold": round(float(np.mean(acc_t)), 4), "rank": round(float(np.mean(acc_r)), 4)}
 
 
+def solve_head(name, fs, X, base, pca_k, alpha, shift) -> LinearHead:
+    """H8: ridge X -> base accuracy; decision = prediction - shift (monotone in predicted solve rate)."""
+    mean = X.mean(0)
+    scale = X.std(0)
+    scale[scale < 1e-6] = 1.0
+    Z = (X - mean) / scale
+    proj = None
+    if pca_k and Z.shape[1] > pca_k and Z.shape[0] > pca_k:
+        proj = PCA(n_components=pca_k, random_state=0).fit(Z).components_.T
+        Z = Z @ proj
+    r = Ridge(alpha=alpha).fit(Z, base)
+    return LinearHead(name=name, feature_set=fs, mean=mean, scale=scale, coef=r.coef_ * 8.0,
+                      intercept=float((r.intercept_ - shift) * 8.0), proj=proj,
+                      meta={"kind": "solve_rate_probe", "alpha": alpha, "pca": pca_k, "n": int(len(base))})
+
+
+def solve_cv(fs, sel, extra, cache, alpha, pca_k, folds):
+    """Grouped CV for H8. Regression rows = labeled selection rows + unlabeled rows (any
+    base_accuracy) of the same target whose problem is in the training folds."""
+    Xl = build_X(fs, sel, cache)
+    Xe = build_X(fs, extra, cache) if extra else None
+    if Xl is None:
+        return None, None
+    y = np.array([r["label"] for r in sel], bool)
+    g = np.array([r["problem_id"] for r in sel])
+    ge = np.array([r["problem_id"] for r in extra]) if extra else np.array([])
+    k = min(folds, len(set(g)))
+    if k < 2:
+        return None, None
+    score = np.zeros(len(y))
+    for tr, te in GroupKFold(n_splits=k).split(Xl, y, g):
+        test_p = set(g[te])
+        X_tr, b_tr = Xl[tr], [sel[i]["base_accuracy"] for i in tr]
+        if Xe is not None and len(ge):
+            m = np.array([p not in test_p for p in ge])
+            X_tr = np.concatenate([X_tr, Xe[m]], 0)
+            b_tr = b_tr + [extra[i]["base_accuracy"] for i in np.where(m)[0]]
+        h0 = solve_head("cv", fs, X_tr, np.array(b_tr, float), pca_k, alpha, 0.0)
+        shift = float(np.median(h0.decision(Xl[tr]) / 8.0))
+        score[te] = solve_head("cv", fs, X_tr, np.array(b_tr, float), pca_k, alpha, shift).proba(Xl[te])
+    return metrics(y, score >= 0.5), score
+
+
 def cv(X, y, groups, C, pca_k, folds):
     k = min(folds, len(set(groups)))
     if k < 2:
@@ -181,7 +224,7 @@ def auc(y, s):
     return round(float(roc_auc_score(y, s)), 4)
 
 
-def train_target(target, rows, mixed, args):
+def train_target(target, rows, mixed, args, unlabeled=()):
     groups_all = np.array([r["problem_id"] for r in rows])
     uniq = sorted(set(groups_all))
     rng = np.random.RandomState(args.seed)
@@ -229,11 +272,35 @@ def train_target(target, rows, mixed, args):
                 rep["candidates"].append(cand)
                 if best is None or (m["bal_acc"], m["acc"]) > (best["bal_acc"], best["acc"]):
                     best = cand
+    # H8 solve-rate probes on internal feature sets (need base_accuracy on rows)
+    extra_sel = [r for r in unlabeled if r["problem_id"] not in hold]
+    if cache and args.solve_probe and all(r.get("base_accuracy") is not None for r in sel):
+        for fs in sorted(cache[1]):
+            for alpha in (10.0, 100.0, 1000.0):
+                pk = 0 if cache[1][fs].shape[1] <= 64 else args.pca
+                m, _ = solve_cv(fs, sel, extra_sel, cache, alpha, pk, args.folds)
+                if m is None:
+                    continue
+                cand = {"feature_set": fs, "kind": "solve", "C": alpha, "pca": pk, **m}
+                rep["candidates"].append(cand)
+                if best is None or (m["bal_acc"], m["acc"]) > (best["bal_acc"], best["acc"]):
+                    best = cand
     rep["best"] = best
     entry = {"prior": round(prior, 4), "heads": []}
+
+    def fit_best(train_rows, extra_rows):
+        fs = best["feature_set"]
+        X = build_X(fs, train_rows, cache)
+        if best.get("kind") != "solve":
+            return head("sel", fs, X, np.array([r["label"] for r in train_rows], bool), best["C"], best["pca"])
+        Xr = np.concatenate([X] + ([build_X(fs, extra_rows, cache)] if extra_rows else []), 0)
+        b = np.array([r["base_accuracy"] for r in list(train_rows) + list(extra_rows)], float)
+        h0 = solve_head("sel", fs, Xr, b, best["pca"], best["C"], 0.0)
+        return solve_head(f"{target}:solve:{fs}", fs, Xr, b, best["pca"], best["C"],
+                          float(np.median(h0.decision(X) / 8.0)))
+
     if best and ho:
-        Xs = build_X(best["feature_set"], sel, cache)
-        h = head("sel", best["feature_set"], Xs, y_sel, best["C"], best["pca"])
+        h = fit_best(sel, extra_sel)
         s_ho = h.proba(build_X(best["feature_set"], ho, cache))
         rep["holdout"] = metrics(y_ho, s_ho >= 0.5, g_ho, mixed)
         rep["holdout_auc"] = auc(y_ho, s_ho)
@@ -243,14 +310,14 @@ def train_target(target, rows, mixed, args):
         ref = max(rep["majority_holdout"]["acc"], rep["model_prior_holdout"]["acc"])
         keep = (rep["holdout"]["acc"] >= ref + args.min_gain
                 and best["acc"] > rep["majority_cv"]["acc"])
+        if target == "*" and not args.shared_heads:
+            keep = False
         rep["export"] = bool(keep)
         if keep:
-            Xa = build_X(best["feature_set"], rows, cache)
-            ya = np.array([r["label"] for r in rows], bool)
-            fname = f"{slug(target) if target != '*' else 'shared'}__{best['feature_set'].replace(':', '_').replace('+', '-')}.npz"
+            kind = "solve__" if best.get("kind") == "solve" else ""
+            fname = f"{slug(target) if target != '*' else 'shared'}__{kind}{best['feature_set'].replace(':', '_').replace('+', '-')}.npz"
             if not args.dry_run:
-                head(f"{target}:{best['feature_set']}", best["feature_set"], Xa, ya, best["C"], best["pca"]).save(
-                    str(ARTIFACTS / fname))
+                fit_best(rows, list(unlabeled)).save(str(ARTIFACTS / fname))
             entry["heads"].append({"file": fname, "weight": 1.0})
             if args.batch_rank:
                 entry["batch_rank"] = True
@@ -269,6 +336,10 @@ def main() -> None:
     ap.add_argument("--pca", type=int, default=16)
     ap.add_argument("--min-gain", type=float, default=0.02)
     ap.add_argument("--batch-rank", action="store_true", help="exported heads label by batch rank (H5)")
+    ap.add_argument("--solve-probe", action="store_true", help="H8: add ridge solve-rate probe candidates")
+    ap.add_argument("--shared-heads", action="store_true",
+                    help="allow exporting a head for the shared '*' target (off: EXP-001 showed the shared "
+                         "problem-only head wins only through a dataset-source confound)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--dry-run", action="store_true", help="report only; do not touch artifacts")
     args = ap.parse_args()
@@ -277,6 +348,8 @@ def main() -> None:
     if not args.allow_leak:
         rows = [r for r in rows if not r.get("leak")]
     rows = dedupe(rows)
+    unl = [r for r in load_labeled(sources=args.sources, include_unlabeled=True)
+           if r.get("label") is None and (args.allow_leak or not r.get("leak"))]
     if not rows:
         raise SystemExit("no labeled rows in data/labeled/")
     mixed = mixed_problems(rows)
@@ -294,7 +367,8 @@ def main() -> None:
         trows = rows if t == "*" else [r for r in rows if target_of(r) == t]
         if not trows:
             continue
-        entry, rep = train_target(t, trows, mixed, args)
+        tun = [] if t == "*" else [r for r in unl if target_of(r) == t]
+        entry, rep = train_target(t, trows, mixed, args, tun)
         manifest["models"][t] = entry
         reports.append(rep)
         b = rep.get("best") or {}

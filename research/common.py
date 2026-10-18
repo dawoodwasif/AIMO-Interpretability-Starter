@@ -51,12 +51,14 @@ def text_hash(text: str) -> str:
     return hashlib.sha1(re.sub(r"\s+", " ", text.strip()).encode("utf-8")).hexdigest()[:12]
 
 
-def load_labeled(paths=None, sources=None) -> list[dict]:
+def load_labeled(paths=None, sources=None, include_unlabeled: bool = False) -> list[dict]:
+    """Labeled rows; include_unlabeled=True also keeps label=None rows that carry a
+    base_accuracy (used to train solve-rate probes, H8)."""
     paths = paths or sorted(LABELED.glob("*.jsonl"))
     rows = []
     for p in paths:
         for r in read_jsonl(p):
-            if r.get("label") is None:
+            if r.get("label") is None and not (include_unlabeled and r.get("base_accuracy") is not None):
                 continue
             if sources and r.get("source") not in sources:
                 continue
