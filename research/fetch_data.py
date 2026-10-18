@@ -14,9 +14,11 @@ import argparse
 import json
 
 from common import LABELED, POOL, RAW, text_hash, write_jsonl
+from aimo_core.config import MODEL_ALIASES
 
 OFFICIAL = [
-    "aimo-interp/val-sample",
+    "aimo-interp/train-main-v2",            # competition models (byeolki: 34 small-track rows)
+    "aimo-interp/val-sample",               # private: needs HF_TOKEN with access
     "aimo-interp/aimo-interp-challenge-sample-full",
     "aimo-interp/augmented-sample-math",
     "aimo-interp/augmented-sample-math-agg",
@@ -37,7 +39,9 @@ POOL_SOURCES = [
 def _load(name: str) -> list[dict]:
     from datasets import load_dataset
 
-    ds = load_dataset(name)
+    import os
+
+    ds = load_dataset(name, token=os.environ.get("HF_TOKEN") or None)
     rows = []
     for split, d in ds.items():
         for r in d:
@@ -56,22 +60,38 @@ def _parse_types(v):
     return sorted(set(map(str, v or [])))
 
 
+LABEL_FIELDS = ("model_is_robust", "is_robust")
+PROBLEM_FIELDS = ("original_problem", "problem")
+
+
 def normalise(name: str, rows: list[dict]) -> list[dict]:
-    out = []
-    for i, r in enumerate(rows):
-        if "model_is_robust" not in r or "original_problem" not in r:
+    """One labeled row per (model, problem, effort); per-family rows collapsed by
+    conjunction (robust only if all robust), like the official importer requires."""
+    groups: dict[tuple, dict] = {}
+    for r in rows:
+        lab = next((r[k] for k in LABEL_FIELDS if k in r and r[k] is not None), None)
+        text = next((r[k] for k in PROBLEM_FIELDS if isinstance(r.get(k), str)), None)
+        if lab is None or not text:
             continue
+        mid = MODEL_ALIASES.get(str(r.get("model_id", "")), str(r.get("model_id", "")))
+        eff = str(r.get("reasoning_effort") or "default")
+        k = (mid, " ".join(text.split()), eff)
+        g = groups.setdefault(k, {"label": True, "families": set(), "base": [], "decay": []})
+        g["label"] = g["label"] and bool(lab)
+        g["families"] |= set(_parse_types(r.get("permutation_type")))
+        if r.get("base_accuracy") is not None:
+            g["base"].append(float(r["base_accuracy"]))
+        if r.get("absolute_accuracy_decay") is not None:
+            g["decay"].append(float(r["absolute_accuracy_decay"]))
+    out = []
+    for (mid, text, eff), g in groups.items():
         out.append({
-            "case_id": f"{name.split('/')[-1]}:{i}",
-            "problem_id": str(r.get("problem_id") or text_hash(r["original_problem"])),
-            "model_id": str(r.get("model_id", "")),
-            "original_problem": r["original_problem"],
-            "permutation_type": _parse_types(r.get("permutation_type")),
-            "label": bool(r["model_is_robust"]),
-            "source": "official",
-            "dataset": name,
-            "base_accuracy": r.get("base_accuracy"),
-            "absolute_accuracy_decay": r.get("absolute_accuracy_decay"),
+            "case_id": f"{name.split('/')[-1]}:{text_hash(mid + eff + text)}",
+            "problem_id": text_hash(text), "model_id": mid, "reasoning_effort": eff,
+            "original_problem": text, "label": g["label"], "source": "official", "dataset": name,
+            "families": sorted(g["families"]),
+            "base_accuracy": min(g["base"]) if g["base"] else None,
+            "max_drop": max(g["decay"]) if g["decay"] else None,
         })
     return out
 

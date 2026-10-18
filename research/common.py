@@ -21,10 +21,12 @@ RESULTS = ROOT / "results"      # one JSON per experiment
 if str(SOLUTION) not in sys.path:
     sys.path.insert(0, str(SOLUTION))
 
-# Unified labeled-row schema (one JSON object per line):
-#   case_id, problem_id, model_id, original_problem, permutation_type (list[str]),
-#   label (bool: robust), source ("official" | "self" | ...),
-#   base_accuracy, absolute_accuracy_decay (optional floats)
+# Unified labeled-row schema (one JSON object per line), ONE row per eval case
+# (model_id, problem, reasoning_effort) - the harness never sees perturbation types:
+#   case_id, problem_id (= text_hash(problem)), model_id, reasoning_effort,
+#   original_problem, label (bool robust | None = ambiguous, dropped),
+#   source ("official" | "official_math" | "byeolki" | "self"), origin (problem source),
+#   leak (bool: organizer leakage advice), base_accuracy, max_drop, family_acc (optional)
 
 
 def read_jsonl(path) -> list[dict]:
@@ -45,7 +47,8 @@ def slug(model_id: str) -> str:
 
 
 def text_hash(text: str) -> str:
-    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
+    """Stable id of a problem text (whitespace-normalised; same as import_external.pid)."""
+    return hashlib.sha1(re.sub(r"\s+", " ", text.strip()).encode("utf-8")).hexdigest()[:12]
 
 
 def load_labeled(paths=None, sources=None) -> list[dict]:
@@ -57,6 +60,8 @@ def load_labeled(paths=None, sources=None) -> list[dict]:
                 continue
             if sources and r.get("source") not in sources:
                 continue
+            r.setdefault("reasoning_effort", "default")
+            r["problem_id"] = text_hash(r["original_problem"])
             rows.append(r)
     return rows
 
