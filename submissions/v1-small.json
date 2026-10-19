@@ -1,0 +1,29 @@
+{
+ "zip": "v1-small.zip",
+ "track": "small",
+ "diagnostic": false,
+ "size_mb": 0.02,
+ "sha256_16": "7fd3ffda9d755b32",
+ "git": "5795332",
+ "git_dirty_solution": true,
+ "manifest_exp": "v1: H9 self-consistency (+frame copy, H10) with batch rank for the 4 small models; gpt-oss-120b predicted spurious",
+ "smoke_fixture": {
+  "accuracy": 0.6666666666666666,
+  "coverage": 1.0,
+  "invalid_predictions": 0,
+  "balanced_accuracy": 0.5,
+  "n": 24,
+  "label_balance": 0.333,
+  "predicted_robust": 0,
+  "runtime_s": 0.1,
+  "timed_out": false,
+  "track": "small",
+  "per_model": {
+   "Qwen/Qwen3.5-4B": 0.667,
+   "Skywork/Skywork-OR1-Math-7B": 0.833,
+   "allenai/Olmo-3-7B-Think": 0.5,
+   "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B": 0.667
+  }
+ },
+ "built": "2026-10-19 03:15"
+}

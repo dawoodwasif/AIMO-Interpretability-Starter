@@ -1,0 +1,13 @@
+{
+ "version": 1,
+ "exp": "v1: H9 self-consistency (+frame copy, H10) with batch rank for the 4 small models; gpt-oss-120b predicted spurious",
+ "note": "Training-free. Evidence: EXP-002b test_sim 0.68 (sampled traces), EXP-003 batch rank, EXP-004 domain dominance; gpt-oss prior from the Main always-True score 0.29 (7/24 hypothesis, to be confirmed by diag stderr).",
+ "default_prior": 0.55,
+ "threshold": 0.6,
+ "models": {
+  "openai/gpt-oss-120b": {"prior": 0.05},
+  "*": {"prior": 0.55, "threshold": 0.6, "batch_rank": true, "rank_frac": 0.5, "rank_min_n": 2,
+        "behav": {"weight": 1.0, "min_tokens": 768, "max_tokens": 12288,
+                  "kinds": ["rename", "typos", "distract", "frame"]}}
+ }
+}

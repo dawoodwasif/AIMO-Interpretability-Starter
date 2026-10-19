@@ -123,3 +123,5 @@ huggingface-hub 1.22.0, joblib 1.5.3, pandas 3.0.3, safetensors 0.8.0, scikit-le
 | — | small | diag-v1-small.zip (sha256 4a82f77902d52e43) | same, small track (does the small worker cache gpt-oss?) | | | optional |
 | — | main | behav-v0-main.zip (sha256 d6604b4d0edf57d8) | EXPERIMENTAL H9+H5: greedy self-consistency on original + 3 rule copies, batch-rank labels; real-route runtime on the worker | | | upload only AFTER diag-v1 (calibrate DECODE_TOK_S); not holdout-validated; ≤2400 s by design (HF max_time) |
 | — | small | behav-v0-small.zip (sha256 4566f449f37b1259) | same, small track | | | optional |
+| — | main | v1-main.zip (sha256 662972fdc6557fe7) | v1: self-consistency (+frame) + batch rank on 4 small models; gpt-oss → spurious (no generation) | | | first real-model run of the generation route; ≤2400 s by design |
+| — | small | v1-small.zip (sha256 7fd3ffda9d755b32) | v1 small track | | | |

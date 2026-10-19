@@ -34,6 +34,7 @@ FORCE_SUFFIX = "\n\n</think>\n\nConsidering the limited time, my final answer is
 FORCE_SUFFIX_HARMONY = "<|end|><|start|>assistant<|channel|>final<|message|>The final answer is \\boxed{"
 FORCE_TOKENS = 16
 LEN_PENALTY = 0.25
+DEFAULT_KINDS = ("rename", "typos", "distract")
 FEATURE_NAMES = ["agree", "parsed", "len", "trunc"]
 
 

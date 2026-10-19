@@ -103,7 +103,8 @@ def predict_batch(model_id: str, effort: str, problems) -> list[bool]:
                     if behav:
                         from . import behaviour
 
-                        bf = behaviour.run(tok, model, texts, deadline, min_tokens=int(behav.get("min_tokens", 512)),
+                        bf = behaviour.run(tok, model, texts, deadline, kinds=tuple(behav.get("kinds", behaviour.DEFAULT_KINDS)),
+                                           min_tokens=int(behav.get("min_tokens", 512)),
                                            max_tokens=int(behav.get("max_tokens", 16384)), model_id=model_id,
                                            effort=effort)
                         if bf is not None:
