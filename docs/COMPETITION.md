@@ -140,3 +140,5 @@ huggingface-hub 1.22.0, joblib 1.5.3, pandas 3.0.3, safetensors 0.8.0, scikit-le
 | 2026-10-18 23:22 | main | v1-main.zip **ID 1001970** | v1, gpt-oss → spurious | **0.48** (10/21) | 1188 s | gpt-oss NOT all spurious; small models got only ~4.7k tokens here |
 | — | main | v2-main.zip (sha256 78cc15af45ba8cba) | self-consistency for all models incl. gpt-oss; run-level clock; per-model caps | | | |
 | — | small | v2-small.zip (sha256 574884f80a5be9d7) | same route as v1 with run-level clock + per-model caps | | | expect ≈ v1 |
+| 2026-10-19 07:38 | small | v2-small.zip **ID 1002859** | v2 | **0.64** (9/14) | 1415 s | ~100 s/case (vs 142–262 s in v1): fewer tokens; −1 case vs v1 = noise |
+| 2026-10-19 07:38 | main | v2-main.zip **ID 1002858** | v2, gpt-oss via self-consistency | **0.43** (9/21) | 1832 s | gpt-oss ran fine (69–108 s/case, all efforts); main still below always-False (0.71 implied) |
