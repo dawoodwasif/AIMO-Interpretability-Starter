@@ -1,0 +1,12 @@
+{
+ "version": 1,
+ "exp": "v3-main: H11 calibration - self-consistency route, robust only with full agreement + short reasoning (thr 0.9); default spurious",
+ "note": "Main base rate ~0.29 robust (always-True leaderboard score). Small track keeps v2 (thr 0.6, balanced).",
+ "default_prior": 0.3,
+ "threshold": 0.9,
+ "models": {
+  "*": {"prior": 0.3, "threshold": 0.9, "batch_rank": true, "rank_frac": 0.3, "rank_min_n": 2,
+        "behav": {"weight": 1.0, "min_tokens": 768, "max_tokens": 12288,
+                  "kinds": ["rename", "typos", "distract", "frame"]}}
+ }
+}

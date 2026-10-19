@@ -142,3 +142,4 @@ huggingface-hub 1.22.0, joblib 1.5.3, pandas 3.0.3, safetensors 0.8.0, scikit-le
 | — | small | v2-small.zip (sha256 574884f80a5be9d7) | same route as v1 with run-level clock + per-model caps | | | expect ≈ v1 |
 | 2026-10-19 07:38 | small | v2-small.zip **ID 1002859** | v2 | **0.64** (9/14) | 1415 s | ~100 s/case (vs 142–262 s in v1): fewer tokens; −1 case vs v1 = noise |
 | 2026-10-19 07:38 | main | v2-main.zip **ID 1002858** | v2, gpt-oss via self-consistency | **0.43** (9/21) | 1832 s | gpt-oss ran fine (69–108 s/case, all efforts); main still below always-False (0.71 implied) |
+| — | main | v3-main.zip | H11: same route, thr 0.9 (full agreement + short), default spurious | | | v2-main predicted robust 10/21 vs base rate 6/21 |
