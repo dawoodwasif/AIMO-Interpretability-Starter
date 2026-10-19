@@ -106,9 +106,19 @@ huggingface-hub 1.22.0, joblib 1.5.3, pandas 3.0.3, safetensors 0.8.0, scikit-le
 - [ ] Label balance of the final test (val is balanced)
 - [ ] Scoring of expert_no_solution variants (unknown; not needed: family not passed)
 
+## Leaderboard-phase label balance (from always-True diag scores, 2026-10-18)
+- Small: 0.50 → balanced (matches byeolki's 7/14).
+- Main: **0.29** → ~71% spurious. Consistent with: the same balanced small-model cases
+  (e.g. 7/14 robust) **plus ~10 gpt-oss-120b cases that are all spurious** (7/24 = 0.292).
+  To confirm with the per-batch `n=` lines in the diag stderr. If confirmed, gpt-oss-120b
+  should be predicted spurious (prior), which also saves its runtime. The final test is a new
+  problem set "built the same way" — treat this as a strong prior, not certainty.
+
 ## Codabench submission log
 | date | track | bundle (submissions/) | what it tests | acc | runtime | notes |
 |------|-------|-----------------------|---------------|-----|---------|-------|
+| 2026-10-18 12:40 | main | diag-v1-main.zip (sha256 46388f2b73041801) **ID 1001229** | **0.29** (all-True) | ? | stderr pending |
+| 2026-10-18 12:40 | small | diag-v1-small.zip (sha256 4a82f77902d52e43) **ID 1001230** | **0.50** (all-True) | ? | stderr pending |
 | — | main | diag-v1-main.zip (sha256 46388f2b73041801) | env probe: cache, load+VRAM, forward, generate tok/s @ batch 1/16/64, behaviour.run timing, ids/efforts/batch sizes; predicts prior (all True) | | | expect ≈0.50; read stderr |
 | — | small | diag-v1-small.zip (sha256 4a82f77902d52e43) | same, small track (does the small worker cache gpt-oss?) | | | optional |
 | — | main | behav-v0-main.zip (sha256 d6604b4d0edf57d8) | EXPERIMENTAL H9+H5: greedy self-consistency on original + 3 rule copies, batch-rank labels; real-route runtime on the worker | | | upload only AFTER diag-v1 (calibrate DECODE_TOK_S); not holdout-validated; ≤2400 s by design (HF max_time) |
