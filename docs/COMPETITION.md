@@ -106,7 +106,13 @@ huggingface-hub 1.22.0, joblib 1.5.3, pandas 3.0.3, safetensors 0.8.0, scikit-le
 - [ ] Label balance of the final test (val is balanced)
 - [ ] Scoring of expert_no_solution variants (unknown; not needed: family not passed)
 
-## Leaderboard-phase label balance (from always-True diag scores, 2026-10-18)
+## Leaderboard-phase label balance — CORRECTED 2026-10-19
+v3-main predicted spurious for all 21 cases and scored 0.524 (11/21) ⇒ **10/21 main cases are
+robust (~balanced)**. The diag-v1-main 0.29 was NOT a clean always-True score: the diagnostic probe
+(load + benchmark all 5 models) ran in every per-case process, so cases were most likely cut off or
+invalid. Treat both diag scores as unreliable base rates. Text below is kept for history.
+
+### (superseded) from always-True diag scores, 2026-10-18
 - Small: 0.50 → balanced (matches byeolki's 7/14).
 - Main: **0.29** → ~71% spurious. Consistent with: the same balanced small-model cases
   (e.g. 7/14 robust) **plus ~10 gpt-oss-120b cases that are all spurious** (7/24 = 0.292).
@@ -143,3 +149,4 @@ huggingface-hub 1.22.0, joblib 1.5.3, pandas 3.0.3, safetensors 0.8.0, scikit-le
 | 2026-10-19 07:38 | small | v2-small.zip **ID 1002859** | v2 | **0.64** (9/14) | 1415 s | ~100 s/case (vs 142–262 s in v1): fewer tokens; −1 case vs v1 = noise |
 | 2026-10-19 07:38 | main | v2-main.zip **ID 1002858** | v2, gpt-oss via self-consistency | **0.43** (9/21) | 1832 s | gpt-oss ran fine (69–108 s/case, all efforts); main still below always-False (0.71 implied) |
 | — | main | v3-main.zip | H11: same route, thr 0.9 (full agreement + short), default spurious | | | v2-main predicted robust 10/21 vs base rate 6/21 |
+| 2026-10-19 13:56 | main | v3-main.zip **ID 1003559** | H11 thr 0.9 | **0.52** (11/21) | 1838 s | predicted robust 0/21 ⇒ = always-False; reveals main ≈ 10/21 robust; H11 premise wrong |
