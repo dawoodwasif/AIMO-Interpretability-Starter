@@ -1,0 +1,12 @@
+{
+ "version": 1,
+ "exp": "v2: H9 self-consistency (+frame) for ALL models incl. gpt-oss; per-case run-level clock; measured decode speeds",
+ "note": "Training-free. v1 small 0.71 (14 cases). gpt-oss now runs the same route instead of a blanket spurious prior (v1 main 0.48).",
+ "default_prior": 0.55,
+ "threshold": 0.6,
+ "models": {
+  "*": {"prior": 0.55, "threshold": 0.6, "batch_rank": true, "rank_frac": 0.5, "rank_min_n": 2,
+        "behav": {"weight": 1.0, "min_tokens": 768, "max_tokens": 12288,
+                  "kinds": ["rename", "typos", "distract", "frame"]}}
+ }
+}

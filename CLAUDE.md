@@ -33,10 +33,12 @@ by faster average runtime over three trials. **Small-track ZIPs must contain
 
 ## 2. Hard constraints (violating any = zero score)
 
-1. **3600 s total** for the whole prediction run, all models together, on one
-   RTX PRO 6000 (96 GB, Blackwell sm_120, shared with other jobs), 192 CPU cores.
-   A timeout scores 0. Our rule: worst case ≤ 2400 s (`SAFETY_MARGIN_S` = 1200)
-   using measured timings. Organizers may raise the limit to ~170 s/case (#6).
+1. **Time limit.** Documented: 3600 s for the whole run. Observed on Codabench
+   (2026-10-18 logs): `job_timeout_s=4200`, are_robust called **once per case**
+   (apparently a fresh process per case), and cases near the deadline are skipped
+   (scored wrong) instead of failing the run. Our rule: plan on 4200 − 600 s via the
+   run-level clock (`aimo_core/clock.py`, state file), ≤ 150 s per case, and degrade
+   to priors when time runs out. Organizers may scale the limit to ~170 s/case (#6).
 2. **Offline.** No network. Models only from the read-only HF cache
    (`local_files_only=True`). Never download at eval time.
 3. **Only these packages exist**: Python stdlib, torch 2.12.1 (CUDA 13.2),

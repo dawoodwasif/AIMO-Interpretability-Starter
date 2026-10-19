@@ -123,8 +123,9 @@ def run(tok, model, problems: list[str], deadline: float, kinds=("rename", "typo
     prompts = [internals.format_prompt(tok, t, effort) for t in texts]
     left = deadline - time.monotonic()
     tps = config.cost(config.DECODE_TOK_S, model_id)
-    # decode speed per sequence is ~flat in batch size on a large GPU; keep 35% slack
-    max_new = int(min(max_tokens, 0.65 * left * tps))
+    # measured per-sequence speeds (config.DECODE_TOK_S) are already pessimistic; 20% slack,
+    # and HF max_time enforces the deadline regardless
+    max_new = int(min(max_tokens, 0.8 * (left - 15.0) * tps))
     if max_new < min_tokens:
         _log(f"behaviour: skip, only {left:.0f}s left -> {max_new} tokens < {min_tokens}")
         return None
@@ -143,14 +144,18 @@ def run(tok, model, problems: list[str], deadline: float, kinds=("rename", "typo
         for i, f in zip(todo, forced):
             gens[i] = (gens[i][0] + "\\boxed{" + f[0], gens[i][1], "")
     _log(f"behaviour: {len(prompts)} seqs, max_new={max_new}, chunk={chunk}, {time.monotonic() - t0:.0f}s, "
-         f"trunc={np.mean(trunc):.2f}")
+         f"trunc={np.mean(trunc):.2f}, gen_tok={sum(g[1] for g in gens)}")
     raw = []
     for i in range(len(problems)):
         g = gens[i * per:(i + 1) * per]
         raw.append({"kinds": ["original"] + list(kinds), "answers": [extract_answer(x[0]) for x in g],
                     "lens": [int(x[1]) for x in g], "trunc": [bool(t) for t in trunc[i * per:(i + 1) * per]],
                     "max_new": int(max_new)})
-    return raw if return_raw else features_from_raw(raw)
+    if return_raw:
+        return raw
+    f = features_from_raw(raw)
+    _log("behaviour feats [agree, parsed, len, trunc]: " + "; ".join(",".join(f"{v:.2f}" for v in r) for r in f))
+    return f
 
 
 def score(feats: np.ndarray) -> np.ndarray:

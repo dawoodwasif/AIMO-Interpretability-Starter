@@ -58,13 +58,19 @@ def predict_batch(model_id: str, effort: str, problems) -> list[bool]:
     if n == 0:
         return []
     t_start = time.monotonic()
-    call = clock.register_call()
-    share = clock.share_for_this_call()
+    call = clock.register_call(n)
+    share = clock.budget_for_call(model_id, n)
     entry = artifacts.model_entry(model_id, effort)
     thr = float(entry.get("threshold", artifacts.manifest().get("threshold", 0.5)))
     prior_p = float(entry.get("prior", artifacts.manifest().get("default_prior", 0.5)))
     _log(f"call {call}: model={model_id} effort={effort} n={n} track={config.TRACK} "
-         f"share={share:.0f}s elapsed={clock.elapsed():.0f}s")
+         f"share={share:.0f}s run_elapsed={clock.elapsed():.0f}s done={clock.problems_done()}")
+    if call == 1:  # learn the harness protocol: env var NAMES only (no values, no data)
+        import os
+
+        keys = sorted(k for k in os.environ if any(t in k.upper() for t in
+                                                    ("BUDGET", "TIMEOUT", "DEADLINE", "CASE", "AIMO", "CODA", "TIME")))
+        _log(f"env keys: {keys}")
 
     try:
         diagnostics.run_once(model_id, effort, n)
@@ -130,5 +136,6 @@ def predict_batch(model_id: str, effort: str, problems) -> list[bool]:
 
     if len(preds) != n:
         preds = (list(preds) + [True] * n)[:n]
+    clock.finish_call(n)
     _log(f"call {call} done in {time.monotonic() - t_start:.1f}s; robust={sum(preds)}/{n}")
     return [bool(x) for x in preds]

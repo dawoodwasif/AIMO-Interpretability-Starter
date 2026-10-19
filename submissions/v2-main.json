@@ -1,0 +1,31 @@
+{
+ "zip": "v2-main.zip",
+ "track": "main",
+ "diagnostic": false,
+ "size_mb": 0.02,
+ "sha256_16": "78cc15af45ba8cba",
+ "git": "0951404",
+ "git_dirty_solution": true,
+ "manifest_exp": "v2: H9 self-consistency (+frame) for ALL models incl. gpt-oss; per-case run-level clock; measured decode speeds",
+ "smoke_fixture": {
+  "accuracy": 0.5833333333333334,
+  "coverage": 1.0,
+  "invalid_predictions": 0,
+  "balanced_accuracy": 0.5,
+  "n": 36,
+  "label_balance": 0.417,
+  "predicted_robust": 0,
+  "runtime_s": 0.2,
+  "timed_out": false,
+  "track": "main",
+  "per_model": {
+   "Qwen/Qwen3.5-4B": 0.667,
+   "Skywork/Skywork-OR1-Math-7B": 0.833,
+   "allenai/Olmo-3-7B-Think": 0.5,
+   "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B": 0.667,
+   "openai/gpt-oss-120b@low": 0.5,
+   "openai/gpt-oss-120b@medium": 0.333
+  }
+ },
+ "built": "2026-10-19 11:33"
+}

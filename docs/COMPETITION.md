@@ -114,6 +114,17 @@ huggingface-hub 1.22.0, joblib 1.5.3, pandas 3.0.3, safetensors 0.8.0, scikit-le
   should be predicted spurious (prior), which also saves its runtime. The final test is a new
   problem set "built the same way" — treat this as a strong prior, not certainty.
 
+## Codabench harness as observed (v1 logs, 2026-10-18) — differs from the public repo
+- `[ingestion] track=small cases=14 case_timeout_s=4200 job_timeout_s=4200 safety_margin_s=180`
+- are_robust is called **once per case** (n=1), cases ordered by model; per-case wall time is
+  constant within a model ⇒ apparently a **fresh process per case** (module state lost).
+- Near the deadline cases are `skipped_for_deadline` (scored wrong), not a run failure.
+- Leaderboard sets: small 14 cases (Qwen 5, Skywork 3, Olmo 3, DeepSeek 3); main 21 cases
+  (Qwen 2, Skywork 3, Olmo 2, DeepSeek 3, gpt-oss 11: low 5, medium 3, **high 3**). 7 case ids are
+  shared between tracks (same id ⇒ same label).
+- Measured per-sequence decode (5 seqs/batch, HF generate): Qwen ~50, Skywork ~38, Olmo ~28,
+  DeepSeek ~27 tok/s.
+
 ## Codabench submission log
 | date | track | bundle (submissions/) | what it tests | acc | runtime | notes |
 |------|-------|-----------------------|---------------|-----|---------|-------|
@@ -125,3 +136,7 @@ huggingface-hub 1.22.0, joblib 1.5.3, pandas 3.0.3, safetensors 0.8.0, scikit-le
 | — | small | behav-v0-small.zip (sha256 4566f449f37b1259) | same, small track | | | optional |
 | — | main | v1-main.zip (sha256 662972fdc6557fe7) | v1: self-consistency (+frame) + batch rank on 4 small models; gpt-oss → spurious (no generation) | | | first real-model run of the generation route; ≤2400 s by design |
 | — | small | v1-small.zip (sha256 7fd3ffda9d755b32) | v1 small track | | | |
+| 2026-10-18 23:22 | small | v1-small.zip **ID 1001971** | v1 (per-case threshold since n=1) | **0.71** (10/14) | 2704 s | best so far; byeolki best was 0.643 |
+| 2026-10-18 23:22 | main | v1-main.zip **ID 1001970** | v1, gpt-oss → spurious | **0.48** (10/21) | 1188 s | gpt-oss NOT all spurious; small models got only ~4.7k tokens here |
+| — | main | v2-main.zip (sha256 78cc15af45ba8cba) | self-consistency for all models incl. gpt-oss; run-level clock; per-model caps | | | |
+| — | small | v2-small.zip (sha256 574884f80a5be9d7) | same route as v1 with run-level clock + per-model caps | | | expect ≈ v1 |
